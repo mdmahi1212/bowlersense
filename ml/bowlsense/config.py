@@ -6,6 +6,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -189,12 +190,80 @@ class ApiSettings(_Section):
         return self
 
 
-class CoachSettings(_Section):
-    """LLM coach."""
+LOCAL_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1"})
 
+
+def is_local_url(url: str) -> bool:
+    """Return True if ``url`` is an http(s) URL pointing at this machine."""
+    parsed = urlsplit(url)
+    return parsed.scheme in ("http", "https") and (parsed.hostname or "") in LOCAL_HOSTS
+
+
+class CoachSettings(_Section):
+    """Local LLM coach (Ollama). Never configured with a remote URL."""
+
+    provider: Literal["ollama"]
+    ollama_url: str
     model: str = Field(min_length=1)
     max_words: int = Field(gt=0)
     timeout_s: float = Field(gt=0)
+    retries: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _local_only(self) -> CoachSettings:
+        if not is_local_url(self.ollama_url):
+            raise ValueError(
+                f"coach.ollama_url must point at localhost/127.0.0.1, got '{self.ollama_url}'"
+            )
+        return self
+
+
+def _resolve(path: Path) -> Path:
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+class StorageSettings(_Section):
+    """Local data locations. Relative paths resolve against the repo root."""
+
+    root: Path
+    db_path: Path
+    models_dir: Path
+
+    @property
+    def root_path(self) -> Path:
+        """Absolute storage root (holds ``raw/`` and ``outputs/``)."""
+        return _resolve(self.root)
+
+    @property
+    def db_file(self) -> Path:
+        """Absolute SQLite database path."""
+        return _resolve(self.db_path)
+
+    @property
+    def models_path(self) -> Path:
+        """Absolute model-weights folder."""
+        return _resolve(self.models_dir)
+
+
+class ServerSettings(_Section):
+    """Local servers. Bound to the loopback interface only."""
+
+    host: str
+    api_port: int = Field(ge=1, le=65535)
+    web_port: int = Field(ge=1, le=65535)
+
+    @model_validator(mode="after")
+    def _loopback(self) -> ServerSettings:
+        if self.host not in LOCAL_HOSTS:
+            raise ValueError(f"server.host must be a loopback address, got '{self.host}'")
+        if self.api_port == self.web_port:
+            raise ValueError("server.api_port and server.web_port must differ")
+        return self
+
+    @property
+    def web_origins(self) -> list[str]:
+        """Origins the API accepts for CORS."""
+        return [f"http://localhost:{self.web_port}", f"http://127.0.0.1:{self.web_port}"]
 
 
 class Settings(_Section):
@@ -213,19 +282,15 @@ class Settings(_Section):
     jobs: JobSettings
     api: ApiSettings
     coach: CoachSettings
+    storage: StorageSettings
+    server: ServerSettings
 
 
 class EnvSettings(_Section):
-    """Settings read from environment variables (secrets and deployment paths)."""
+    """Settings read from environment variables. There are no secrets: everything is local."""
 
     config_path: Path
-    db_backend: Literal["sqlite", "supabase"]
-    sqlite_path: Path
-    cache_dir: Path
-    anthropic_api_key: str | None
-    supabase_url: str | None
-    supabase_service_role_key: str | None
-    web_origin: str
+    offline: bool
 
 
 def load_settings(path: Path | str | None = None) -> Settings:
@@ -260,25 +325,19 @@ def _env(name: str) -> str | None:
     return value or None
 
 
-def load_env() -> EnvSettings:
-    """Read environment-driven settings, applying defaults for unset variables.
+TRUE_VALUES: frozenset[str] = frozenset({"1", "true", "yes", "on"})
 
-    Raises:
-        ConfigError: if ``BOWLSENSE_DB`` has an unknown value.
-    """
-    cache_dir = Path(_env("BOWLSENSE_CACHE_DIR") or Path.home() / ".cache" / "bowlsense")
-    db_backend = (_env("BOWLSENSE_DB") or "sqlite").lower()
-    if db_backend not in ("sqlite", "supabase"):
-        raise ConfigError(f"BOWLSENSE_DB must be 'sqlite' or 'supabase', got '{db_backend}'.")
+
+def offline_requested() -> bool:
+    """Return True when ``BOWLSENSE_OFFLINE`` is set to a truthy value."""
+    return (_env("BOWLSENSE_OFFLINE") or "").lower() in TRUE_VALUES
+
+
+def load_env() -> EnvSettings:
+    """Read environment-driven settings, applying defaults for unset variables."""
     return EnvSettings(
         config_path=Path(_env("BOWLSENSE_CONFIG") or DEFAULT_CONFIG_PATH),
-        db_backend=db_backend,
-        sqlite_path=Path(_env("BOWLSENSE_SQLITE_PATH") or cache_dir / "bowlsense.db"),
-        cache_dir=cache_dir,
-        anthropic_api_key=_env("ANTHROPIC_API_KEY"),
-        supabase_url=_env("SUPABASE_URL"),
-        supabase_service_role_key=_env("SUPABASE_SERVICE_ROLE_KEY"),
-        web_origin=_env("BOWLSENSE_WEB_ORIGIN") or "http://localhost:3000",
+        offline=offline_requested(),
     )
 
 

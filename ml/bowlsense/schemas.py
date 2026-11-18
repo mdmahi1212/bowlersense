@@ -285,7 +285,6 @@ def json_schema() -> dict[str, Any]:
         defs.update(schema.pop("$defs", {}))
         defs[model.__name__] = schema
     return {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "BowlSense",
         "$defs": dict(sorted(defs.items())),
     }

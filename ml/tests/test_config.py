@@ -10,8 +10,10 @@ import yaml
 from bowlsense.config import (
     DEFAULT_CONFIG_PATH,
     FAULT_CODES,
+    REPO_ROOT,
     Settings,
     get_settings,
+    is_local_url,
     load_env,
     load_settings,
 )
@@ -35,7 +37,8 @@ def test_default_config_loads(settings: Settings) -> None:
     assert settings.pose.backend == "rtm"
     assert set(settings.faults.weights) == set(FAULT_CODES)
     assert abs(sum(settings.injury.weights.values()) - 1.0) < 1e-9
-    assert settings.coach.model == "claude-sonnet-5-5"
+    assert settings.coach.model == "llama3.1:8b"
+    assert settings.coach.timeout_s == 120
     assert settings.jobs.max_attempts == 3
 
 
@@ -99,29 +102,73 @@ def test_unknown_key_rejected(tmp_path: Path) -> None:
         load_settings(_write(tmp_path, raw))
 
 
-def test_env_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    for var in (
-        "BOWLSENSE_DB",
-        "BOWLSENSE_CONFIG",
-        "BOWLSENSE_SQLITE_PATH",
-        "ANTHROPIC_API_KEY",
-    ):
-        monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("BOWLSENSE_CACHE_DIR", str(tmp_path))
+def test_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BOWLSENSE_CONFIG", raising=False)
+    monkeypatch.delenv("BOWLSENSE_OFFLINE", raising=False)
     env = load_env()
-    assert env.db_backend == "sqlite"
-    assert env.sqlite_path == tmp_path / "bowlsense.db"
     assert env.config_path == DEFAULT_CONFIG_PATH
-    assert env.anthropic_api_key is None
+    assert env.offline is False
 
 
-def test_env_bad_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BOWLSENSE_DB", "mysql")
-    with pytest.raises(ConfigError, match="BOWLSENSE_DB"):
-        load_env()
+@pytest.mark.parametrize(("value", "expected"), [("1", True), ("true", True), ("0", False)])
+def test_env_offline_flag(monkeypatch: pytest.MonkeyPatch, value: str, expected: bool) -> None:
+    monkeypatch.setenv("BOWLSENSE_OFFLINE", value)
+    assert load_env().offline is expected
 
 
 def test_env_config_path_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("BOWLSENSE_CONFIG", str(tmp_path / "missing.yaml"))
-    with pytest.raises(ConfigError, match=r"missing.yaml"):
+    with pytest.raises(ConfigError, match=r"missing\.yaml"):
         load_settings()
+
+
+def test_local_only_defaults(settings: Settings) -> None:
+    assert settings.coach.provider == "ollama"
+    assert is_local_url(settings.coach.ollama_url)
+    assert settings.server.host == "127.0.0.1"
+    assert settings.server.web_origins == ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def test_storage_paths_resolve_to_repo(settings: Settings) -> None:
+    assert settings.storage.db_file == REPO_ROOT / "data" / "bowlsense.db"
+    assert settings.storage.root_path == REPO_ROOT / "data" / "storage"
+    assert settings.storage.models_path == REPO_ROOT / "models"
+
+
+def test_absolute_storage_path_kept(tmp_path: Path) -> None:
+    raw = _raw()
+    raw["storage"]["db_path"] = str(tmp_path / "x.db")
+    assert load_settings(_write(tmp_path, raw)).storage.db_file == tmp_path / "x.db"
+
+
+@pytest.mark.parametrize(
+    ("url", "ok"),
+    [
+        ("http://localhost:11434", True),
+        ("http://127.0.0.1:11434", True),
+        ("http://[::1]:11434", True),
+        ("https://api.example.com", False),
+        ("http://192.168.1.5:11434", False),
+        ("ftp://localhost", False),
+    ],
+)
+def test_is_local_url(url: str, ok: bool) -> None:
+    assert is_local_url(url) is ok
+
+
+def test_remote_ollama_rejected(tmp_path: Path) -> None:
+    raw = _raw()
+    raw["coach"]["ollama_url"] = "https://ollama.example.com"
+    with pytest.raises(ConfigError, match="localhost"):
+        load_settings(_write(tmp_path, raw))
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "match"),
+    [("host", "0.0.0.0", "loopback"), ("web_port", 8000, "differ")],
+)
+def test_server_validation(tmp_path: Path, key: str, value: object, match: str) -> None:
+    raw = _raw()
+    raw["server"][key] = value
+    with pytest.raises(ConfigError, match=match):
+        load_settings(_write(tmp_path, raw))

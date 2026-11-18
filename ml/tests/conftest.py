@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from bowlsense import offline
 from bowlsense.config import Settings, load_settings
-from bowlsense.db import SQLiteDatabase
+from bowlsense.db.repo import Repository
+from bowlsense.db.session import make_engine, upgrade
+from bowlsense.storage import LocalStorage
 
 REAL_DATA_DIR = Path(__file__).parent / "data" / "real"
 
@@ -20,11 +23,29 @@ def settings() -> Settings:
 
 
 @pytest.fixture()
-def db(tmp_path: Path) -> Iterator[SQLiteDatabase]:
-    """A fresh on-disk SQLite database per test."""
-    database = SQLiteDatabase(tmp_path / "test.db")
-    yield database
-    database.close()
+def repo(tmp_path: Path) -> Iterator[Repository]:
+    """A fresh, migrated SQLite database per test."""
+    engine = make_engine(tmp_path / "test.db")
+    upgrade(engine)
+    yield Repository(engine)
+    engine.dispose()
+
+
+@pytest.fixture()
+def storage(tmp_path: Path) -> LocalStorage:
+    """A fresh storage root per test."""
+    return LocalStorage(tmp_path / "storage")
+
+
+@pytest.fixture()
+def no_offline_guard() -> Iterator[None]:
+    """Make sure the offline guard is off for the test and restored afterwards."""
+    was_on = offline.is_enabled()
+    offline.disable()
+    yield
+    offline.disable()
+    if was_on:
+        offline.enable()
 
 
 def real_clips() -> list[Path]:

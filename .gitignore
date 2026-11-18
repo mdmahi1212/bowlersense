@@ -14,9 +14,17 @@ __pycache__/
 htmlcov/
 *.egg-info/
 
-# Data and outputs
+# Local data, storage and model weights
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
+data/storage/raw/*
+data/storage/outputs/*
+!data/storage/raw/.gitkeep
+!data/storage/outputs/.gitkeep
+models/*
+!models/.gitkeep
 out/
 results/
 ml/tests/data/real/*

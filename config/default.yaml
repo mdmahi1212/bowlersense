@@ -1,5 +1,6 @@
 # BowlSense configuration. Every tunable threshold, weight and model name lives here.
 # Override the file location with the BOWLSENSE_CONFIG environment variable.
+# Everything runs locally: the only URLs allowed here are localhost / 127.0.0.1.
 
 video:
   min_fps_hard: 60
@@ -47,6 +48,17 @@ api:
   max_upload_mb: 500
   allowed_extensions: [".mp4", ".mov", ".avi", ".jpg", ".jpeg", ".png"]
 coach:
-  model: claude-sonnet-5-5
+  provider: ollama
+  ollama_url: http://localhost:11434
+  model: llama3.1:8b       # use qwen2.5:3b on low-RAM laptops
   max_words: 250
-  timeout_s: 30
+  timeout_s: 120
+  retries: 1
+storage:
+  root: data/storage       # relative paths resolve against the repo root
+  db_path: data/bowlsense.db
+  models_dir: models
+server:
+  host: 127.0.0.1
+  api_port: 8000
+  web_port: 3000

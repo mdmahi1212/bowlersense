@@ -1,4 +1,4 @@
-"""Cross-platform equivalent of `make check`: ruff, black, mypy, pytest (and web checks later).
+"""Cross-platform `make check`: local-only URL check, ruff, black, mypy, pytest, web checks.
 
 Run from anywhere: ``ml/.venv/Scripts/python scripts/check.py`` (Windows) or
 ``ml/.venv/bin/python scripts/check.py`` (Linux/macOS). Exits non-zero on the first failure.
@@ -28,6 +28,7 @@ def run(name: str, cmd: list[str], cwd: Path) -> None:
 def main() -> None:
     """Run every check in order."""
     py = sys.executable
+    run("local-only URLs", [py, str(ROOT / "scripts" / "check_urls.py")], ROOT)
     run("ruff", [py, "-m", "ruff", "check", "."], ML_DIR)
     run("black", [py, "-m", "black", "--check", "--quiet", "."], ML_DIR)
     run("mypy", [py, "-m", "mypy"], ML_DIR)

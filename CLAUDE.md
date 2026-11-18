@@ -8,6 +8,17 @@
 
 You are building **BowlSense**, an AI system that analyses cricket bowling from video and images. It's a university AI-course project. It must run end to end on a student laptop (CPU fallback) and faster on a GPU.
 
+### 100% LOCAL — hard requirement
+**Everything runs on the user's own machine. No cloud services, no hosted APIs, no accounts, no telemetry.**
+- **No** Supabase, Firebase, Vercel, AWS, Anthropic/OpenAI APIs, or any remote database, storage or auth.
+- Database = **SQLite** file at `data/bowlsense.db`. Files (videos, overlays, PDFs) = the local folder `data/storage/`.
+- The AI coach uses a **local LLM via Ollama** (`http://localhost:11434`). If Ollama isn't running, fall back to the template report. Never call a remote API.
+- Model weights (YOLO, RTMPose, MediaPipe, the Ollama model) are downloaded **once** during setup by `scripts/download_models.py` into `models/`. After that, the whole system must work **with the network unplugged**. Add a test that sets an env flag `BOWLSENSE_OFFLINE=1`, which makes any attempted network call raise an error, and runs the full synthetic pipeline.
+- The web app runs on `localhost:3000`, the API on `localhost:8000`, both bound to `127.0.0.1` only.
+- No login needed (single-user local app). Bowler profiles are just local records.
+- Disable every library's telemetry (e.g. `YOLO_OFFLINE=1`, Ultralytics `settings.update({"sync": False})`, `NEXT_TELEMETRY_DISABLED=1`).
+- One command to start everything: `python run.py` (Windows/Linux/macOS). It starts the API, the worker and the Next.js app, checks Ollama, and opens the browser.
+
 Input: a video (or a single image) of a bowler.
 Output: an annotated skeleton video, per-delivery metrics, legality screening, technique faults, injury-risk score, ball speed and length, fatigue trends, comparison against a reference action, plain-language coaching, and a web dashboard that shows all of it.
 
@@ -46,12 +57,13 @@ Output: an annotated skeleton video, per-delivery metrics, legality screening, t
 | Numerics | NumPy, SciPy, pandas |
 | ML | scikit-learn, PyTorch (for phase model, bowler-ID model), tslearn (DTW) |
 | Explainability | SHAP (only for the optional ML injury model) |
-| Jobs | Simple DB-backed job queue (a `jobs` table polled by a worker) — no Redis required |
-| PDF | WeasyPrint (if it fails to install on Windows, use ReportLab instead and note it) |
-| LLM coach | Anthropic API (`claude-sonnet-5-5`), key from env `ANTHROPIC_API_KEY`; if missing, fall back to a template-based report |
-| Frontend | Next.js (App Router, TypeScript), Tailwind CSS, Recharts, shadcn/ui |
-| Backend data | Supabase (Postgres + Storage + Auth + Realtime) |
-| Local dev DB | Supabase CLI local stack, OR plain SQLite fallback via env flag `BOWLSENSE_DB=sqlite` so the ML service can run without Supabase |
+| Jobs | SQLite-backed job queue (a `jobs` table polled by a local worker process) — no Redis |
+| PDF | ReportLab (pure Python, installs everywhere) |
+| LLM coach | **Ollama, local**. Default model `llama3.1:8b` (configurable; `qwen2.5:3b` for weak laptops). Template report if Ollama is unavailable |
+| Frontend | Next.js (App Router, TypeScript), Tailwind CSS, Recharts, shadcn/ui — runs locally, talks only to `localhost:8000` |
+| Database | SQLite via SQLAlchemy 2.x + Alembic migrations, file `data/bowlsense.db` (WAL mode on) |
+| File storage | Local folder `data/storage/{raw,outputs}/`, served by FastAPI `StaticFiles` / `FileResponse` |
+| Live status | Server-Sent Events from FastAPI (`/sessions/{id}/events`), polling fallback every 2 s |
 | Testing | pytest, pytest-cov; Vitest + Playwright for frontend smoke tests |
 | Lint/format | ruff, black, mypy (Python); ESLint, Prettier (TS) |
 
@@ -67,7 +79,17 @@ bowlsense/
 ├── PROGRESS.md
 ├── README.md
 ├── .env.example
-├── docker-compose.yml         # ml-service + worker (+ optional local supabase)
+├── run.py                     # one-command local launcher (API + worker + web + Ollama check)
+├── scripts/
+│   ├── setup.py               # creates venv, installs deps, npm install, runs migrations
+│   ├── download_models.py     # one-time weight download into models/ (+ `ollama pull`)
+│   └── evaluate.py
+├── models/                    # local weights (gitignored)
+├── data/
+│   ├── bowlsense.db           # SQLite (gitignored)
+│   ├── storage/raw/           # uploaded videos (gitignored)
+│   ├── storage/outputs/       # overlays, keyframes, PDFs (gitignored)
+│   └── reference/             # reference action JSONs
 ├── config/
 │   └── default.yaml
 ├── ml/
@@ -108,7 +130,7 @@ bowlsense/
 │   │   │   └── bowler_id.py   # module G (sequence classifier)
 │   │   ├── coach/
 │   │   │   ├── drills.py      # fault → drill library
-│   │   │   ├── llm.py         # Anthropic call + template fallback
+│   │   │   ├── llm.py         # local Ollama call + template fallback
 │   │   │   └── prompts.py
 │   │   ├── render/
 │   │   │   ├── overlay.py     # skeleton + angle labels video
@@ -116,7 +138,12 @@ bowlsense/
 │   │   │   ├── clipping.py    # split long video into deliveries
 │   │   │   └── report_pdf.py
 │   │   ├── pipeline.py        # orchestrates everything → AnalysisResult
-│   │   ├── db.py              # Supabase client OR SQLite fallback
+│   │   ├── db/
+│   │   │   ├── models.py      # SQLAlchemy ORM tables (Section 8)
+│   │   │   ├── session.py     # engine, WAL pragma, session factory
+│   │   │   └── migrations/    # Alembic
+│   │   ├── storage.py         # local file storage helpers (safe paths, no traversal)
+│   │   ├── offline.py         # BOWLSENSE_OFFLINE guard that blocks sockets to non-localhost
 │   │   ├── api.py             # FastAPI app
 │   │   ├── worker.py          # job poller
 │   │   └── cli.py             # `bowlsense analyze video.mp4 --out results/`
@@ -147,7 +174,7 @@ bowlsense/
 │   │   ├── deliveries/[id]/page.tsx     # single-delivery deep dive
 │   │   ├── compare/page.tsx             # user vs reference
 │   │   ├── bowlers/page.tsx             # profiles
-│   │   └── api/...                      # thin proxies to ML service where needed
+│   │   └── settings/page.tsx            # local settings + delete all data
 │   ├── components/
 │   │   ├── VideoPlayer.tsx              # frame-step, phase markers, overlay toggle
 │   │   ├── AngleChart.tsx               # angle over time with threshold bands
@@ -159,9 +186,7 @@ bowlsense/
 │   │   ├── FatigueTrend.tsx
 │   │   ├── CoachChat.tsx
 │   │   └── UploadDropzone.tsx
-│   └── lib/supabase.ts, lib/types.ts    # types generated to match schemas.py
-└── supabase/
-    └── migrations/0001_init.sql
+│   └── lib/api.ts, lib/types.ts         # typed fetch client for localhost:8000; types generated from schemas.py
 ```
 
 ---
@@ -313,7 +338,8 @@ Component score = mean of its drivers; overall = weighted sum. Bands: < 35 low, 
 
 ### H. Coach (`coach/`)
 - `drills.py`: a dict mapping each fault code → 2–3 drills (name, description, reps).
-- `llm.py`: send ONLY the JSON metrics (no video, no images) to the Anthropic API with a system prompt: a friendly bowling coach, concrete, no medical diagnosis, cites the numbers, ≤ 250 words, prioritises the top 3 issues. Timeout 30 s, 2 retries; on any failure fall back to the template report built from faults + drills. Must work with no API key.
+- `llm.py`: send ONLY the JSON metrics (no video, no images) to the **local Ollama server** (`POST http://localhost:11434/api/chat`, `stream: false`, model from config) with a system prompt: a friendly bowling coach, concrete, no medical diagnosis, cites the numbers, ≤ 250 words, prioritises the top 3 issues. Check `GET /api/tags` first to confirm the model is pulled. Timeout 120 s (local CPU models are slow), 1 retry; on any failure fall back to the template report built from faults + drills. Must work with Ollama stopped. Never call any non-localhost URL.
+- The template report must be good on its own (it's the default path in tests): a short intro, the top 3 faults with their numbers in plain words, drills, risk summary, disclaimers.
 - The coach chat endpoint keeps the session metrics as context.
 
 ### I. Rendering (`render/`)
@@ -327,23 +353,22 @@ Component score = mean of its drivers; overall = weighted sum. Bands: < 35 low, 
 
 ---
 
-## 8. Database (`supabase/migrations/0001_init.sql`)
+## 8. Database (SQLite, `ml/bowlsense/db/models.py` + Alembic)
 
-Tables (all with `id uuid pk default gen_random_uuid()`, `created_at timestamptz default now()`):
+Tables (all with `id` = UUID string primary key generated in Python, `created_at` = UTC datetime default now):
 
-- `profiles` (user_id fk auth.users, display_name, role: 'player' | 'coach')
-- `bowlers` (owner_id, name, height_cm, bowling_arm, bowling_type, dob nullable)
-- `sessions` (bowler_id, recorded_at, video_path, fps, view, status: 'queued' | 'processing' | 'done' | 'failed', error text, calibration jsonb)
+- `bowlers` (name, height_cm, bowling_arm, bowling_type, dob nullable)
+- `sessions` (bowler_id, recorded_at, video_path (relative), fps, view, status: 'queued' | 'processing' | 'done' | 'failed', error text, calibration JSON)
 - `jobs` (session_id, status, attempts int, locked_at, last_error)
-- `deliveries` (session_id, idx, phases jsonb, action_type, speed_kmh, length, line, pitch_x, pitch_y, technique_score, injury_overall, injury_band, legality_flagged, elbow_extension_deg)
-- `delivery_metrics` (delivery_id, name, values jsonb) — the angle series
-- `faults` (delivery_id, code, severity, value, threshold, frames int[])
-- `session_summaries` (session_id, consistency, fatigue jsonb, workload jsonb, similar jsonb, coach_report text, pdf_path, overlay_path)
+- `deliveries` (session_id, idx, phases JSON, action_type, speed_kmh, length, line, pitch_x, pitch_y, technique_score, injury_overall, injury_band, legality_flagged, elbow_extension_deg)
+- `delivery_metrics` (delivery_id, name, values JSON) — the angle series
+- `faults` (delivery_id, code, severity, value, threshold, frames JSON list)
+- `session_summaries` (session_id, consistency, fatigue JSON, workload JSON, similar JSON, coach_report text, pdf_path, overlay_path)
 - `coach_messages` (session_id, role, content)
 
-Enable RLS on all tables: users can only read/write rows belonging to their own bowlers. Coaches see bowlers shared with them via a `bowler_shares` table. Storage buckets: `raw-videos` (private), `outputs` (private, signed URLs).
+Local single-user app, so no auth, no RLS. Use `String(36)` UUIDs, JSON columns via SQLAlchemy `JSON`, and `ON DELETE CASCADE` foreign keys (enable `PRAGMA foreign_keys=ON` on every connection). Enable `PRAGMA journal_mode=WAL` so the API and the worker can use the DB at the same time. Store file paths relative to `data/storage/`, never absolute.
 
-The SQLite fallback in `db.py` mirrors the same tables (no RLS) for local/offline runs and tests.
+Deleting a session must also delete its files from `data/storage/`. Add a "Delete all my data" button in settings that wipes the DB rows and storage folders.
 
 ---
 
@@ -352,8 +377,15 @@ The SQLite fallback in `db.py` mirrors the same tables (no RLS) for local/offlin
 | method | path | does |
 |---|---|---|
 | GET | `/health` | model load status, GPU yes/no |
-| POST | `/sessions` | create a session + job from an uploaded file or a storage path |
+| POST | `/sessions` | multipart upload → file saved to `data/storage/raw/<uuid>.<ext>` → session + job created |
 | GET | `/sessions/{id}` | status + SessionResult when done |
+| GET | `/sessions/{id}/events` | SSE stream: status, % progress, current stage |
+| GET | `/sessions` | list sessions (filter by bowler) |
+| DELETE | `/sessions/{id}` | delete session + its files |
+| GET/POST | `/bowlers` | list / create bowler profiles |
+| GET | `/files/{path}` | serve overlay video (with HTTP Range support so the player can seek), keyframes, PDFs from `data/storage/outputs` only |
+| GET | `/settings`, PUT `/settings` | local settings; GET `/llm/models` lists pulled Ollama models |
+| DELETE | `/data` | delete all local data (requires `{"confirm": "DELETE"}` body) |
 | POST | `/sessions/{id}/calibration` | save 4 pitch points |
 | POST | `/analyze/image` | image mode, synchronous |
 | GET | `/deliveries/{id}` | full DeliveryMetrics |
@@ -361,9 +393,9 @@ The SQLite fallback in `db.py` mirrors the same tables (no RLS) for local/offlin
 | GET | `/sessions/{id}/report.pdf` | PDF |
 | GET | `/bowlers/{id}/workload` | ACWR history |
 
-Max upload 500 MB; accept mp4/mov/avi/jpg/png; reject everything else with 415. CORS limited to the web origin from env. Write `test_api.py` with FastAPI's TestClient and the SQLite DB.
+Max upload 500 MB; accept mp4/mov/avi/jpg/png; reject everything else with 415. CORS limited to `http://localhost:<web_port>` and `http://127.0.0.1:<web_port>`. Stream uploads to disk in chunks (never read the whole file into RAM). Write `test_api.py` with FastAPI's TestClient and the SQLite DB.
 
-`worker.py`: polls `jobs` every 2 s, locks a row (`UPDATE … WHERE status='queued' … RETURNING`), runs the pipeline, writes results, retries up to 2 times, and stores the traceback in `last_error` on failure.
+`worker.py`: polls `jobs` every 2 s, claims a job atomically in a `BEGIN IMMEDIATE` transaction (SQLite ≥ 3.35 supports `UPDATE … RETURNING`), reports progress % per stage to the DB for the SSE stream, runs the pipeline, writes results, retries up to 2 times, and stores the traceback in `last_error` on failure.
 
 CLI: `python -m bowlsense.cli analyze path/to/video.mp4 --out out/ [--allow-low-fps] [--calib calib.json] [--no-llm]` must work with zero web/DB setup and write `result.json`, `overlay.mp4`, keyframes, and `report.pdf`.
 
@@ -393,8 +425,8 @@ This is what makes testing possible without real footage. Build it carefully.
 
 ## 11. Frontend (`web/`)
 
-- **Upload page**: drag-and-drop, choose or create a bowler, recording tips (fps ≥ 120, tripod, side-on at ~10 m, full body in frame). Upload to Supabase Storage with a progress bar, then POST `/sessions`.
-- **Session dashboard**: status via Supabase Realtime (queued → processing → done). When done: overall technique score, injury gauge + band, legality badge (with the screening disclaimer), consistency, fatigue trend chart, pitch map, a delivery list (click → detail), coach report, a PDF download.
+- **Upload page**: drag-and-drop, choose or create a bowler, recording tips (fps ≥ 120, tripod, side-on at ~10 m, full body in frame). Upload with a progress bar (XHR `upload.onprogress`) straight to `POST localhost:8000/sessions` as multipart; the API saves the file into `data/storage/raw/`.
+- **Session dashboard**: live status via the SSE endpoint `/sessions/{id}/events` (queued → processing with % and current stage → done/failed), with a polling fallback. When done: overall technique score, injury gauge + band, legality badge (with the screening disclaimer), consistency, fatigue trend chart, pitch map, a delivery list (click → detail), coach report, a PDF download.
 - **Delivery detail**: a video player with the overlay toggle, frame stepping (← →), phase markers on the timeline, a keyframe strip, angle charts (elbow with the 15° band, front knee, trunk) synced to the player cursor, the fault list with "jump to frame", a body risk map, drills.
 - **Calibration UI**: show the first frame and let the user click 4 crease corners; save to `/sessions/{id}/calibration`; re-run the delivery module.
 - **Compare page**: pick a reference action; side-by-side synced skeleton playback; per-joint deviation bars.
@@ -402,7 +434,7 @@ This is what makes testing possible without real footage. Build it carefully.
 - **Coach chat**: a chat panel on the session page.
 - **Design**: clean, sporty, dark-mode-first, accessible colour contrast; risk colours are green/amber/red, but always paired with text labels.
 - Every page handles loading, empty and error states. No unhandled promise rejections.
-- Auth: Supabase email magic link.
+- No auth. A settings page with: Ollama model picker (from `/api/tags`), pose backend (rtm / mediapipe), GPU on/off, storage usage, "Delete all my data".
 
 ---
 
@@ -422,12 +454,12 @@ Do these in order. **At the end of each phase:** run `ruff check`, `mypy`, `pyte
 | 8 | Rendering: overlay, keyframes, clipping, PDF | The overlay MP4 plays in Chrome (h264, faststart); the PDF opens; clipping splits a synthetic 3-ball video into 3 |
 | 9 | Module F: ball tracking, calibration, speed, length/line, pitch map | Synthetic ball trajectory with known speed recovered within ±5%; returns None without calibration |
 | 10 | Module G: DTW compare, consistency, bowler ID (with the insufficient-data path) | Identical sequences → ~100% similarity; tests pass |
-| 11 | Coach: drills, LLM + template fallback, chat | Works with and without `ANTHROPIC_API_KEY` (mocked in tests) |
+| 11 | Coach: drills, LLM + template fallback, chat | Works with Ollama running and stopped (Ollama mocked in tests via `respx`/monkeypatch) |
 | 12 | Full pipeline + CLI + FastAPI + worker | `test_pipeline_synthetic.py` and `test_api.py` pass end to end |
-| 13 | Supabase migration + RLS + storage | `supabase db reset` applies cleanly; an RLS test proves user A can't read user B's sessions |
+| 13 | SQLite schema + Alembic + local storage | `alembic upgrade head` on an empty DB works; cascade delete removes rows and files; API + worker write concurrently without `database is locked` errors (test with 2 processes) |
 | 14 | Next.js app: all pages in Section 11 | `npm run build` passes; a Playwright smoke test uploads a synthetic video and sees results |
 | 15 | Image mode + optional learned phase model + optional 3D lift (feature-flagged) | Flags off: everything still passes; flags on: their own tests pass |
-| 16 | Docker compose, README, final PROGRESS.md, evaluation script | `docker compose up` brings up the ML service + worker; `scripts/evaluate.py` prints the metrics table (pose PCK if labels exist, phase error, legality MAE, speed MAE, etc.) |
+| 16 | Local launcher + setup + offline test, README, final PROGRESS.md, evaluation script | Fresh clone → `python scripts/setup.py` → `python scripts/download_models.py` → `python run.py` opens a working app; with `BOWLSENSE_OFFLINE=1` the full synthetic pipeline + API tests pass; `scripts/evaluate.py` prints the metrics table (pose PCK if labels exist, phase error, legality MAE, speed MAE, etc.) |
 
 ---
 
@@ -446,7 +478,9 @@ Do these in order. **At the end of each phase:** run `ruff check`, `mypy`, `pyte
 - [ ] The GPU is optional: detect CUDA and fall back to CPU with a log line.
 - [ ] Model weights download on first run into `~/.cache/bowlsense` with a clear message; if offline, the error says which file to download manually and where to put it.
 - [ ] Secrets only from env; `.env.example` lists every variable; `.env` is in `.gitignore`.
-- [ ] The frontend never calls the ML service with the Supabase service-role key exposed to the browser.
+- [ ] No URL other than `localhost`/`127.0.0.1` anywhere in runtime code (grep check in `make check`); servers bind to `127.0.0.1` only.
+- [ ] Uploaded file names are never used as paths (save as `<uuid>.<ext>`); file-serving endpoints reject path traversal.
+- [ ] Ports 8000/3000 already in use → `run.py` prints a clear message and picks the next free port, passing it to the web app via env.
 - [ ] All disclaimers are present: legality = screening only; injury = not medical advice.
 - [ ] `PROGRESS.md` updated.
 
@@ -492,18 +526,27 @@ workload:
 delivery:
   length_zones_m: {yorker: 2, full: 6, good: 8, short: 10}
 coach:
-  model: claude-sonnet-5-5
+  provider: ollama
+  ollama_url: http://localhost:11434
+  model: llama3.1:8b       # use qwen2.5:3b on low-RAM laptops
   max_words: 250
-  timeout_s: 30
+  timeout_s: 120
+storage:
+  root: data/storage
+  db_path: data/bowlsense.db
+server:
+  host: 127.0.0.1
+  api_port: 8000
+  web_port: 3000
 ```
 
 ---
 
 ## 15. Final deliverables
 
-1. A working CLI, API, worker and web app.
+1. A working CLI, API, worker and web app, all running locally with `python run.py` and no internet after setup.
 2. `pytest` coverage ≥ 80% for `ml/bowlsense/analysis`, `geometry` and `phases`.
-3. README with: setup (Windows + Linux), how to record good footage, how to run the CLI, the web app and Docker, the architecture diagram (Mermaid), the module list, limitations and disclaimers.
+3. README with: setup (Windows + Linux), how to record good footage, hardware needs (8 GB RAM minimum, 16 GB + GPU recommended), installing Ollama, one-time model download, how to run fully offline, how to run the CLI and the web app, the architecture diagram (Mermaid), the module list, limitations and disclaimers.
 4. `scripts/evaluate.py` producing the evaluation table for the course report.
 5. `PROGRESS.md` showing every phase complete.
 
