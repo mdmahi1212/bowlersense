@@ -1,0 +1,862 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BowlSense",
+  "$defs": {
+    "AngleSeries": {
+      "additionalProperties": false,
+      "description": "A named angle over time.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "const": "deg",
+          "default": "deg",
+          "title": "Unit",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Values",
+          "type": "array"
+        },
+        "frames": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Frames",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "values",
+        "frames"
+      ],
+      "title": "AngleSeries",
+      "type": "object"
+    },
+    "BallTrack": {
+      "additionalProperties": false,
+      "description": "Ball positions over time: (frame, x, y, conf).",
+      "properties": {
+        "points": {
+          "items": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "release_frame": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Frame"
+        },
+        "bounce_frame": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bounce Frame"
+        }
+      },
+      "required": [
+        "points"
+      ],
+      "title": "BallTrack",
+      "type": "object"
+    },
+    "DeliveryMetrics": {
+      "additionalProperties": false,
+      "description": "Everything measured for one delivery.",
+      "properties": {
+        "delivery_idx": {
+          "minimum": 0,
+          "title": "Delivery Idx",
+          "type": "integer"
+        },
+        "phases": {
+          "$ref": "#/$defs/PhaseEvents"
+        },
+        "action_type": {
+          "title": "Action Type",
+          "type": "string"
+        },
+        "legality": {
+          "$ref": "#/$defs/LegalityResult"
+        },
+        "faults": {
+          "items": {
+            "$ref": "#/$defs/Fault"
+          },
+          "title": "Faults",
+          "type": "array"
+        },
+        "technique_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Technique Score",
+          "type": "number"
+        },
+        "injury": {
+          "$ref": "#/$defs/InjuryRisk"
+        },
+        "speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speed Kmh"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "pitch_xy": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pitch Xy"
+        },
+        "release_height_pct": {
+          "title": "Release Height Pct",
+          "type": "number"
+        },
+        "stride_pct": {
+          "title": "Stride Pct",
+          "type": "number"
+        },
+        "angles": {
+          "items": {
+            "$ref": "#/$defs/AngleSeries"
+          },
+          "title": "Angles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "delivery_idx",
+        "phases",
+        "action_type",
+        "legality",
+        "faults",
+        "technique_score",
+        "injury",
+        "release_height_pct",
+        "stride_pct",
+        "angles"
+      ],
+      "title": "DeliveryMetrics",
+      "type": "object"
+    },
+    "FatigueDrift": {
+      "additionalProperties": false,
+      "description": "Percent change of one delivery's metrics versus the session baseline.",
+      "properties": {
+        "delivery_idx": {
+          "minimum": 0,
+          "title": "Delivery Idx",
+          "type": "integer"
+        },
+        "runup_speed_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runup Speed Pct"
+        },
+        "release_height_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Release Height Pct"
+        },
+        "wrist_speed_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Wrist Speed Pct"
+        },
+        "technique_score_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Technique Score Pct"
+        },
+        "fault_count_delta": {
+          "title": "Fault Count Delta",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "delivery_idx",
+        "runup_speed_pct",
+        "release_height_pct",
+        "wrist_speed_pct",
+        "technique_score_pct",
+        "fault_count_delta"
+      ],
+      "title": "FatigueDrift",
+      "type": "object"
+    },
+    "FatigueResult": {
+      "additionalProperties": false,
+      "description": "Session-level fatigue trend.",
+      "properties": {
+        "baseline_deliveries": {
+          "minimum": 0,
+          "title": "Baseline Deliveries",
+          "type": "integer"
+        },
+        "drifts": {
+          "items": {
+            "$ref": "#/$defs/FatigueDrift"
+          },
+          "title": "Drifts",
+          "type": "array"
+        },
+        "fatigue_index": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Fatigue Index",
+          "type": "number"
+        },
+        "alert": {
+          "title": "Alert",
+          "type": "boolean"
+        },
+        "alert_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alert Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "baseline_deliveries",
+        "drifts",
+        "fatigue_index",
+        "alert",
+        "alert_reasons"
+      ],
+      "title": "FatigueResult",
+      "type": "object"
+    },
+    "Fault": {
+      "additionalProperties": false,
+      "description": "A detected technique fault.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "severity": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Severity",
+          "type": "number"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        },
+        "frames": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "severity",
+        "value",
+        "threshold",
+        "frames",
+        "explanation"
+      ],
+      "title": "Fault",
+      "type": "object"
+    },
+    "FramePose": {
+      "additionalProperties": false,
+      "description": "All keypoints of the bowler in one frame. A missing joint maps to ``None``.",
+      "properties": {
+        "frame_idx": {
+          "minimum": 0,
+          "title": "Frame Idx",
+          "type": "integer"
+        },
+        "t": {
+          "description": "Seconds from the start of the video",
+          "minimum": 0,
+          "title": "T",
+          "type": "number"
+        },
+        "keypoints": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Keypoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Keypoints",
+          "type": "object"
+        }
+      },
+      "required": [
+        "frame_idx",
+        "t",
+        "keypoints"
+      ],
+      "title": "FramePose",
+      "type": "object"
+    },
+    "InjuryRisk": {
+      "additionalProperties": false,
+      "description": "Rule-based injury-risk estimate (not medical advice).",
+      "properties": {
+        "overall": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Overall",
+          "type": "number"
+        },
+        "band": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "components": {
+          "items": {
+            "$ref": "#/$defs/RiskComponent"
+          },
+          "title": "Components",
+          "type": "array"
+        },
+        "top_drivers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Top Drivers",
+          "type": "array"
+        },
+        "disclaimer": {
+          "default": "Rule-based screening estimate, not a trained medical model and not medical advice.",
+          "title": "Disclaimer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "overall",
+        "band",
+        "components"
+      ],
+      "title": "InjuryRisk",
+      "type": "object"
+    },
+    "Keypoint": {
+      "additionalProperties": false,
+      "description": "One detected joint in full-frame pixel coordinates.",
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Z"
+        },
+        "conf": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Conf",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "conf"
+      ],
+      "title": "Keypoint",
+      "type": "object"
+    },
+    "LegalityResult": {
+      "additionalProperties": false,
+      "description": "Elbow-extension screening result.",
+      "properties": {
+        "elbow_extension_deg": {
+          "title": "Elbow Extension Deg",
+          "type": "number"
+        },
+        "threshold_deg": {
+          "title": "Threshold Deg",
+          "type": "number"
+        },
+        "flagged": {
+          "title": "Flagged",
+          "type": "boolean"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "note": {
+          "default": "2D video screening only. The official ICC test uses 3D motion capture.",
+          "title": "Note",
+          "type": "string"
+        },
+        "front_foot_no_ball": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Front Foot No Ball"
+        }
+      },
+      "required": [
+        "elbow_extension_deg",
+        "threshold_deg",
+        "flagged",
+        "confidence"
+      ],
+      "title": "LegalityResult",
+      "type": "object"
+    },
+    "PhaseEvents": {
+      "additionalProperties": false,
+      "description": "Frame indices of the key events of one delivery.",
+      "properties": {
+        "run_up_start": {
+          "minimum": 0,
+          "title": "Run Up Start",
+          "type": "integer"
+        },
+        "bound": {
+          "minimum": 0,
+          "title": "Bound",
+          "type": "integer"
+        },
+        "bfc": {
+          "minimum": 0,
+          "title": "Bfc",
+          "type": "integer"
+        },
+        "ffc": {
+          "minimum": 0,
+          "title": "Ffc",
+          "type": "integer"
+        },
+        "arm_horizontal": {
+          "minimum": 0,
+          "title": "Arm Horizontal",
+          "type": "integer"
+        },
+        "release": {
+          "minimum": 0,
+          "title": "Release",
+          "type": "integer"
+        },
+        "follow_through_end": {
+          "minimum": 0,
+          "title": "Follow Through End",
+          "type": "integer"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "run_up_start",
+        "bound",
+        "bfc",
+        "ffc",
+        "arm_horizontal",
+        "release",
+        "follow_through_end",
+        "confidence"
+      ],
+      "title": "PhaseEvents",
+      "type": "object"
+    },
+    "PoseSequence": {
+      "additionalProperties": false,
+      "description": "A bowler's pose over time.",
+      "properties": {
+        "fps": {
+          "exclusiveMinimum": 0,
+          "title": "Fps",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "view": {
+          "default": "unknown",
+          "enum": [
+            "side",
+            "front",
+            "behind",
+            "unknown"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "bowling_arm": {
+          "default": "right",
+          "enum": [
+            "right",
+            "left"
+          ],
+          "title": "Bowling Arm",
+          "type": "string"
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/FramePose"
+          },
+          "title": "Frames",
+          "type": "array"
+        }
+      },
+      "required": [
+        "fps",
+        "width",
+        "height",
+        "frames"
+      ],
+      "title": "PoseSequence",
+      "type": "object"
+    },
+    "RiskComponent": {
+      "additionalProperties": false,
+      "description": "One component of the injury-risk model.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        },
+        "weight": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Weight",
+          "type": "number"
+        },
+        "drivers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Drivers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "score",
+        "weight",
+        "drivers"
+      ],
+      "title": "RiskComponent",
+      "type": "object"
+    },
+    "SessionResult": {
+      "additionalProperties": false,
+      "description": "The full result of analysing one session (one video).",
+      "properties": {
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "deliveries": {
+          "items": {
+            "$ref": "#/$defs/DeliveryMetrics"
+          },
+          "title": "Deliveries",
+          "type": "array"
+        },
+        "consistency_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Consistency Score",
+          "type": "number"
+        },
+        "fatigue": {
+          "$ref": "#/$defs/FatigueResult"
+        },
+        "workload": {
+          "$ref": "#/$defs/WorkloadResult"
+        },
+        "similar_pros": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Similar Pros",
+          "type": "array"
+        },
+        "coach_report": {
+          "title": "Coach Report",
+          "type": "string"
+        },
+        "quality_warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Quality Warnings",
+          "type": "array"
+        },
+        "artifacts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Artifacts",
+          "type": "object"
+        }
+      },
+      "required": [
+        "session_id",
+        "deliveries",
+        "consistency_score",
+        "fatigue",
+        "workload",
+        "similar_pros",
+        "coach_report",
+        "quality_warnings",
+        "artifacts"
+      ],
+      "title": "SessionResult",
+      "type": "object"
+    },
+    "WorkloadResult": {
+      "additionalProperties": false,
+      "description": "Acute:chronic workload ratio. Ratio fields are ``None`` without enough history.",
+      "properties": {
+        "balls_this_session": {
+          "minimum": 0,
+          "title": "Balls This Session",
+          "type": "integer"
+        },
+        "acute_load": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acute Load"
+        },
+        "chronic_load": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chronic Load"
+        },
+        "acwr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acwr"
+        },
+        "flagged": {
+          "default": false,
+          "title": "Flagged",
+          "type": "boolean"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "balls_this_session"
+      ],
+      "title": "WorkloadResult",
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+# BowlSense configuration. Every tunable threshold, weight and model name lives here.
+# Override the file location with the BOWLSENSE_CONFIG environment variable.
+
+video:
+  min_fps_hard: 60
+  min_fps_recommended: 120
+  min_height_px: 720
+  min_bowler_visible_frac: 0.70
+  min_mean_keypoint_conf: 0.5
+pose:
+  backend: rtm          # rtm | mediapipe
+  min_conf: 0.3
+  max_gap_frames: 5
+  lift_3d: false
+phases:
+  use_model: false
+legality:
+  elbow_extension_threshold_deg: 15.0
+alignment:
+  mixed_threshold_deg: 30
+  counter_rotation_flag_deg: 30
+faults:
+  knee_collapse_deg: 20
+  overstride_pct: 90
+  understride_pct: 65
+  head_fall_pct: 15
+  lateral_flexion_deg: 30
+  low_release_pct: 115
+  runup_decel_pct: 15
+  short_follow_pct: 40
+  weights: {KNEE_COLLAPSE: 1.5, OVERSTRIDE: 1, UNDERSTRIDE: 1, HEAD_FALL: 1, LATERAL_FLEXION: 1.5,
+            WEAK_FRONT_ARM: 0.7, RUNUP_DECEL: 0.7, LOW_RELEASE: 0.7, CHAIN_ORDER: 1, SHORT_FOLLOW: 0.5}
+injury:
+  weights: {lumbar: 0.40, knee: 0.20, shoulder: 0.15, side_strain: 0.15, fatigue_modifier: 0.10}
+  bands: {low: 35, high: 65}
+fatigue:
+  baseline_deliveries: 6
+  alert_index: 40
+workload:
+  acwr_flag: 1.5
+delivery:
+  length_zones_m: {yorker: 2, full: 6, good: 8, short: 10}
+jobs:
+  poll_interval_s: 2
+  max_attempts: 3       # first try + 2 retries
+api:
+  max_upload_mb: 500
+  allowed_extensions: [".mp4", ".mov", ".avi", ".jpg", ".jpeg", ".png"]
+coach:
+  model: claude-sonnet-5-5
+  max_words: 250
+  timeout_s: 30
