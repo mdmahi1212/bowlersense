@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from bowlsense.analysis.alignment import assess_alignment
-from bowlsense.analysis.fatigue import delivery_fatigue_input
+from bowlsense.analysis.fatigue import assess_fatigue, delivery_fatigue_input
 from bowlsense.analysis.faults import assess_faults
 from bowlsense.analysis.injury import assess_injury, injury_features
 from bowlsense.analysis.legality import assess_legality
@@ -25,15 +25,12 @@ from bowlsense.io.video import VideoInfo, iter_frames, probe_video
 from bowlsense.phases.heuristic import detect_phases
 from bowlsense.pose.base import load_backend
 from bowlsense.pose.smoothing import clean_sequence
+from bowlsense.render.clipping import ClipWindow, clip_windows, find_releases, sub_sequence
 from bowlsense.schemas import (
     KEYPOINT_NAMES,
-    AlignmentResult,
-    FatigueInput,
-    FaultReport,
+    DeliveryAnalysis,
+    FatigueResult,
     FramePose,
-    InjuryRisk,
-    LegalityResult,
-    PhaseEvents,
     PoseSequence,
 )
 
@@ -115,7 +112,9 @@ def extract_pose(
     cleaned = clean_sequence(seq, settings.pose)
     arm = detect_bowling_arm(cleaned).arm
     cleaned = cleaned.model_copy(update={"bowling_arm": arm})
-    view = estimate_view(cleaned, runup_window(cleaned, settings.body), settings.video)
+    first_release = find_releases(cleaned, settings.clipping)[0]
+    window = runup_window(cleaned, settings.body, release=first_release)
+    view = estimate_view(cleaned, window, settings.video)
     warnings += check_pose(seq, _visible_frames(seq), settings.video)
     log.info("front end: %s arm, %s view, %d warning(s)", arm, view, len(warnings))
     return FrontEndResult(
@@ -125,18 +124,6 @@ def extract_pose(
         bowler_track_id=track_id,
         backend=used_backend,
     )
-
-
-class DeliveryAnalysis(BaseModel):
-    """Modules A-D (and E's per-delivery inputs) for one delivery."""
-
-    height_px: float
-    phases: PhaseEvents
-    legality: LegalityResult
-    alignment: AlignmentResult
-    faults: FaultReport
-    injury: InjuryRisk
-    fatigue_input: FatigueInput
 
 
 def analyze_delivery(
@@ -167,3 +154,32 @@ def analyze_delivery(
         injury=assess_injury(features, settings.injury),
         fatigue_input=delivery_fatigue_input(delivery_idx, seq, phases, height, faults, settings),
     )
+
+
+class SessionAnalysis(BaseModel):
+    """Every delivery found in one video, with its clip window, plus session fatigue."""
+
+    windows: list[ClipWindow]
+    deliveries: list[DeliveryAnalysis]
+    fatigue: FatigueResult
+
+
+def analyze_session(
+    front: FrontEndResult,
+    settings: Settings,
+    popping_crease: Sequence[Point] | None = None,
+) -> SessionAnalysis:
+    """Split the video into deliveries around each release and analyse each one."""
+    raw = front.sequence
+    cleaned = clean_sequence(raw, settings.pose)
+    releases = find_releases(cleaned, settings.clipping)
+    windows = clip_windows(releases, len(raw.frames), raw.fps, settings.clipping)
+    log.info("session: %d deliver%s found", len(windows), "y" if len(windows) == 1 else "ies")
+    deliveries = [
+        analyze_delivery(
+            sub_sequence(raw, w), settings, delivery_idx=i, popping_crease=popping_crease
+        )
+        for i, w in enumerate(windows)
+    ]
+    fatigue = assess_fatigue([d.fatigue_input for d in deliveries], settings.fatigue)
+    return SessionAnalysis(windows=windows, deliveries=deliveries, fatigue=fatigue)

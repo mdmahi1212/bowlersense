@@ -1,7 +1,9 @@
 """Command line: ``python -m bowlsense.cli analyze path/to/video.mp4 --out out/``.
 
-Works with zero web or database setup. Writes ``pose.json`` (the bowler's raw keypoints) and
-``result.json`` (front-end summary + delivery analysis) into ``--out``.
+Works with zero web or database setup. Finds every delivery in the clip and writes into
+``--out``: ``result.json`` (all deliveries), ``pose.json`` (the bowler's raw keypoints),
+``overlay.mp4`` (H.264, plays in a browser), ``keyframes/`` (PNGs per delivery),
+``report.pdf`` and ``charts/``.
 """
 
 from __future__ import annotations
@@ -10,11 +12,17 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from bowlsense.config import load_settings
 from bowlsense.errors import BowlSenseError, ConfigError
-from bowlsense.pipeline import analyze_delivery, extract_pose
+from bowlsense.pipeline import analyze_session, extract_pose
+from bowlsense.pose.smoothing import clean_sequence
+from bowlsense.render.clipping import sub_sequence
+from bowlsense.render.keyframes import export_keyframes
+from bowlsense.render.overlay import OverlayPainter, OverlaySegment, render_overlay
+from bowlsense.render.report_pdf import ReportDelivery, ReportInput, build_report
 
 log = logging.getLogger("bowlsense.cli")
 
@@ -49,10 +57,41 @@ def analyze(args: argparse.Namespace) -> int:
         bowler_track_id=args.bowler_track_id,
         pose_json=args.pose_from_json,
     )
-    delivery = analyze_delivery(front.sequence, settings)
+    session = analyze_session(front, settings)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
     (out / "pose.json").write_text(front.sequence.model_dump_json(), encoding="utf-8")
+
+    cleaned = clean_sequence(front.sequence, settings.pose)
+    segments = [
+        OverlaySegment(start=w.start, stop=w.stop, phases=d.phases, legality=d.legality)
+        for w, d in zip(session.windows, session.deliveries, strict=True)
+    ]
+    overlay = render_overlay(args.video, cleaned, segments, out / "overlay.mp4", settings.render)
+    painter = OverlayPainter(cleaned, segments, settings.render)
+    report_deliveries = []
+    for i, (seg, delivery) in enumerate(zip(segments, session.deliveries, strict=True)):
+        keyframes = export_keyframes(
+            args.video, painter, seg, out / "keyframes" / f"delivery_{i + 1:02d}", settings.render
+        )
+        clip_seq = sub_sequence(cleaned, session.windows[i])
+        report_deliveries.append(
+            ReportDelivery(index=i, analysis=delivery, sequence=clip_seq, keyframes=keyframes)
+        )
+    report = build_report(
+        ReportInput(
+            video_name=args.video.name,
+            created=datetime.now(),
+            view=front.sequence.view,
+            bowling_arm=front.sequence.bowling_arm,
+            fps=front.video.fps,
+            quality_warnings=front.warnings,
+            deliveries=report_deliveries,
+        ),
+        out / "report.pdf",
+        out / "charts",
+        settings.legality.elbow_extension_threshold_deg,
+    )
     result = {
         "video": front.video.model_dump(),
         "backend": front.backend,
@@ -60,10 +99,21 @@ def analyze(args: argparse.Namespace) -> int:
         "view": front.sequence.view,
         "bowling_arm": front.sequence.bowling_arm,
         "quality_warnings": front.warnings,
-        "delivery": delivery.model_dump(mode="json"),
+        "deliveries": [
+            {"clip": w.model_dump(), **d.model_dump(mode="json")}
+            for w, d in zip(session.windows, session.deliveries, strict=True)
+        ],
+        "fatigue": session.fatigue.model_dump(mode="json"),
+        "artifacts": {
+            "overlay": overlay.name,
+            "report": report.name,
+            "pose": "pose.json",
+            "keyframes": "keyframes",
+        },
     }
     (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    print(f"Wrote {out / 'result.json'} and {out / 'pose.json'}")
+    n = len(session.deliveries)
+    print(f"Analysed {n} deliver{'y' if n == 1 else 'ies'}; results in {out}")
     for warning in front.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     return 0

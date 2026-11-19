@@ -105,10 +105,16 @@ def with_bowling_arm(seq: PoseSequence) -> PoseSequence:
     return seq.model_copy(update={"bowling_arm": detect_bowling_arm(seq).arm})
 
 
-def runup_window(seq: PoseSequence, settings: BodySettings) -> tuple[int, int]:
+def runup_window(
+    seq: PoseSequence, settings: BodySettings, release: int | None = None
+) -> tuple[int, int]:
     """``[start, stop)`` frames treated as run-up: from the start of the clip until
-    ``runup_end_before_peak_s`` before the fastest wrist movement (around release)."""
-    _, _, peak = _peak_wrist_speeds(seq)
+    ``runup_end_before_peak_s`` before ``release`` (default: the fastest wrist movement).
+
+    For a video with several deliveries pass the *first* release, so the window doesn't
+    include earlier follow-throughs.
+    """
+    peak = release if release is not None else _peak_wrist_speeds(seq)[2]
     stop = peak - round(settings.runup_end_before_peak_s * seq.fps)
     min_frames = max(3, round(0.25 * seq.fps))
     if stop < min_frames:

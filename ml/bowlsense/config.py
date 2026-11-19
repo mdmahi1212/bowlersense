@@ -324,6 +324,44 @@ def is_local_url(url: str) -> bool:
     return parsed.scheme in ("http", "https") and (parsed.hostname or "") in LOCAL_HOSTS
 
 
+class RenderSettings(_Section):
+    """Overlay video and keyframe rendering."""
+
+    ffmpeg_preset: str = Field(min_length=1)
+    crf: int = Field(ge=0, le=51)
+    conf_low: float = Field(ge=0, le=1)
+    conf_high: float = Field(ge=0, le=1)
+    tint_alpha: float = Field(ge=0, le=1)
+    keyframe_events: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check(self) -> RenderSettings:
+        if self.conf_low >= self.conf_high:
+            raise ValueError("render.conf_low must be < conf_high")
+        allowed = {
+            "run_up_start",
+            "bound",
+            "bfc",
+            "ffc",
+            "arm_horizontal",
+            "release",
+            "follow_through_end",
+        }
+        bad = set(self.keyframe_events) - allowed
+        if bad:
+            raise ValueError(f"render.keyframe_events has unknown events: {sorted(bad)}")
+        return self
+
+
+class ClippingSettings(_Section):
+    """Splitting a long video into one clip per delivery."""
+
+    before_release_s: float = Field(gt=0)
+    after_release_s: float = Field(gt=0)
+    min_gap_s: float = Field(gt=0)
+    min_peak_frac: float = Field(gt=0, le=1)
+
+
 class CoachSettings(_Section):
     """Local LLM coach (Ollama). Never configured with a remote URL."""
 
@@ -411,6 +449,8 @@ class Settings(_Section):
     delivery: DeliverySettings
     jobs: JobSettings
     api: ApiSettings
+    render: RenderSettings
+    clipping: ClippingSettings
     coach: CoachSettings
     storage: StorageSettings
     server: ServerSettings

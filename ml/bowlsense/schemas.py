@@ -268,6 +268,18 @@ class AlignmentResult(_Model):
     notes: list[str] = Field(default_factory=list)
 
 
+class DeliveryAnalysis(_Model):
+    """Modules A-D (and E's per-delivery inputs) for one delivery."""
+
+    height_px: float
+    phases: PhaseEvents
+    legality: LegalityResult
+    alignment: AlignmentResult
+    faults: FaultReport
+    injury: InjuryRisk
+    fatigue_input: FatigueInput
+
+
 class DeliveryMetrics(_Model):
     """Everything measured for one delivery."""
 
@@ -360,6 +372,7 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     InjuryFeatures,
     LegalityResult,
     AlignmentResult,
+    DeliveryAnalysis,
     DeliveryMetrics,
     FatigueInput,
     FatigueDrift,

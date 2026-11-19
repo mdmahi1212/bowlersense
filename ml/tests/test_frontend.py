@@ -307,11 +307,13 @@ def test_gate_cli_analyze_with_pose_json(
     result = json.loads((out / "result.json").read_text(encoding="utf-8"))
     assert result["backend"] == "pose-json" and result["bowler_track_id"] is None
     assert result["view"] == "side" and result["bowling_arm"] == "right"
-    phases = result["delivery"]["phases"]
+    assert len(result["deliveries"]) == 1
+    phases = result["deliveries"][0]["phases"]
+    start = result["deliveries"][0]["clip"]["start"]  # phases are numbered within the clip
     for event in ("bfc", "ffc", "release"):
-        assert abs(phases[event] - getattr(r.phases, event)) <= 2
-    assert result["delivery"]["legality"]["flagged"] is True
-    assert "not medical advice" in result["delivery"]["injury"]["disclaimer"]
+        assert abs(start + phases[event] - getattr(r.phases, event)) <= 2
+    assert result["deliveries"][0]["legality"]["flagged"] is True
+    assert "not medical advice" in result["deliveries"][0]["injury"]["disclaimer"]
     saved = PoseSequence.model_validate_json((out / "pose.json").read_text(encoding="utf-8"))
     assert len(saved.frames) == len(r.sequence.frames)
 
@@ -384,4 +386,4 @@ def test_real_clip_end_to_end(clip: Path, tmp_path: Path) -> None:
     code = cli_main(["analyze", str(clip), "--out", str(tmp_path), "--allow-low-fps"])
     assert code == 0
     result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
-    assert result["delivery"]["phases"]["release"] > 0
+    assert result["deliveries"][0]["phases"]["release"] > 0

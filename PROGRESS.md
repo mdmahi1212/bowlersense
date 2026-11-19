@@ -1,5 +1,33 @@
 # BowlSense — Progress
 
+## Phase 8: Rendering (overlay, keyframes, clipping, PDF) ✅ (2026-11-20)
+
+**Installed**: imageio-ffmpeg 0.8.1 (bundles ffmpeg 9.0.2 with libx264, inside the venv; no system install), reportlab 5.1.0; dev: pypdf 7.1.1 (tests open and read the PDFs).
+
+**Done**
+- `render/ffmpeg.py`: `H264Writer` streams raw BGR frames into ffmpeg's libx264 (`-preset veryfast -crf 23 -pix_fmt yuv420p -movflags +faststart`): one pass, nothing held in memory, odd sizes padded to even, ffmpeg errors surfaced, partial file deleted on failure. Deviation from the spec's mechanism ("H.264 via OpenCV, then re-mux"): OpenCV on Windows can't reliably *write* H.264 without a separately downloaded codec DLL, so frames go straight to ffmpeg; the result is the same (H.264 + faststart). Also `probe_codec` and an MP4 box reader (checks `moov` comes before `mdat`).
+- `render/overlay.py`: skeleton, joint dots coloured by confidence (red < 0.3 ≤ amber < 0.7 ≤ green), live elbow and front-knee angle labels, a phase banner ("Ball 2: Arm circle"…), and a red tint on frames between arm-horizontal and release when legality is flagged. Handles several deliveries in one video.
+- `render/keyframes.py`: PNGs at BFC, FFC, arm-horizontal, release and follow-through end, per delivery, with the overlay drawn.
+- `render/clipping.py`: finds every release in a long clip (bowling-wrist speed peaks above the shoulder, ≥ 50% of the fastest, ≥ 3 s apart, refined to the wrist-height peak), cuts −2.5 s / +1.5 s windows, renumbers sub-sequences, and can write each clip as its own H.264 file (frame-accurate).
+- `render/report_pdf.py`: page 1 has a per-delivery summary (technique score, injury band, legality with confidence, action type) and **both disclaimers** in a highlighted box, plus quality warnings. Each delivery gets a fault table with plain-language explanations, a keyframe strip, matplotlib charts (elbow with the 15° band, front knee, trunk lean; event markers) and the injury breakdown with notes. A coach section is included only when coach text is given (Phase 11). Every page footer repeats the disclaimers.
+- `pipeline.analyze_session()`: splits into deliveries, analyses each, and runs session fatigue. `DeliveryAnalysis` moved into `schemas.py`.
+- **CLI** now writes `result.json` (all deliveries; phases are numbered within each delivery's clip, and the clip's `start` maps them back to video frames), `pose.json`, `overlay.mp4`, `keyframes/delivery_NN/*.png`, `report.pdf`, `charts/`.
+
+**Gates**
+- **Overlay plays in Chrome**: verified in the built-in (Chromium) browser. The test page served from localhost fired loadedmetadata → canplay → playing with no error; duration 15.55 s (1,866 frames at 120 fps, exact); H.264 rated "probably" playable. Tests also check codec = h264 and moov-before-mdat.
+- **The PDF opens**: pypdf reads it; it contains both disclaimers, FLAGGED legality, quality warnings and the charts.
+- **Clipping splits a synthetic 3-ball video into 3**: releases within 1 frame. The CLI on that video: side view and right arm detected, every phase at confidence 1.0, ball 2 flagged (23.4°), ball 3 KNEE_COLLAPSE, 15 keyframes, a 7-page PDF.
+
+**Tested**: 15 new tests (585 passed, 1 skipped; render coverage 90–100%).
+
+**Bugs found and fixed**
+- **Camera view on multi-ball videos**: the view was estimated over a window ending before the *fastest* delivery, which swallowed earlier follow-throughs (rotated shoulders look wide from the side) and returned "front" for a side-view clip. It now uses the *first* delivery's run-up.
+- **Test data**: my stitched 3-ball video started the next run-up 1.0 s after a release (with a teleport), which polluted each clip's +1.5 s tail. Real bowlers walk back for many seconds; the test video now has a 2 s still gap.
+
+**To remember for Phase 12**: Python's built-in test server doesn't support HTTP Range requests, so seeking failed in the browser check (the file itself is fine). The spec's `/files/{path}` endpoint must support Range so the player can seek.
+
+**Note**: the full test suite now takes ~5 minutes (H.264 encoding + synthetic clips).
+
 ## Phase 7: Real-video front end ✅ (2026-11-20)
 
 **Installed** (pinned in `ml/requirements.txt` from `pip freeze`): rtmlib 0.0.16, onnxruntime 1.32.0, mediapipe 1.2.3, ultralytics 8.4.215, **CPU** PyTorch 2.15.0 / torchvision 0.29.2 (from the PyTorch CPU index, a fraction of the CUDA build's size; GPU users install the matching CUDA build), and lap 0.5.14 (ByteTrack).
@@ -162,4 +190,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 8: rendering (overlay MP4 playable in Chrome: H.264 + faststart via ffmpeg, keyframes, clipping a multi-ball video, PDF with ReportLab). ffmpeg is not installed yet.
+**Next**: Phase 9: module F (ball detection + Kalman tracking, pitch calibration/homography, ball speed, length/line, pitch map). Gate: synthetic ball with known speed recovered within ±5%; `None` without calibration.

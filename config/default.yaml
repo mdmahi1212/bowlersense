@@ -119,6 +119,18 @@ jobs:
 api:
   max_upload_mb: 500
   allowed_extensions: [".mp4", ".mov", ".avi", ".jpg", ".jpeg", ".png"]
+render:
+  ffmpeg_preset: veryfast
+  crf: 23                    # H.264 quality (lower = better, bigger)
+  conf_low: 0.3              # joint dots: red below this...
+  conf_high: 0.7             # ...amber in between, green at or above this
+  tint_alpha: 0.25           # red tint strength on frames in a flagged legality window
+  keyframe_events: [bfc, ffc, arm_horizontal, release, follow_through_end]
+clipping:
+  before_release_s: 2.5      # each delivery clip starts this long before release...
+  after_release_s: 1.5       # ...and ends this long after
+  min_gap_s: 3.0             # releases closer than this are treated as one delivery
+  min_peak_frac: 0.5         # a release must reach this fraction of the fastest wrist speed
 coach:
   provider: ollama
   ollama_url: http://localhost:11434
