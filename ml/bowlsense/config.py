@@ -74,6 +74,8 @@ class BodySettings(_Section):
     height_factor: float = Field(gt=0)
     height_top_frac: float = Field(gt=0, le=1)
     runup_end_before_peak_s: float = Field(ge=0)
+    ankle_height_pct: float = Field(ge=0)
+    hand_length_pct: float = Field(ge=0)
 
 
 class PhaseSettings(_Section):
@@ -101,6 +103,11 @@ class LegalitySettings(_Section):
     """Elbow-extension screening."""
 
     elbow_extension_threshold_deg: float = Field(gt=0)
+    high_conf_fps: float = Field(gt=0)
+    high_conf_keypoint: float = Field(ge=0, le=1)
+    medium_conf_fps: float = Field(gt=0)
+    fit_degree: int = Field(ge=1, le=5)
+    fit_pad_s: float = Field(ge=0)
 
 
 class AlignmentSettings(_Section):
@@ -108,6 +115,16 @@ class AlignmentSettings(_Section):
 
     mixed_threshold_deg: float = Field(gt=0)
     counter_rotation_flag_deg: float = Field(gt=0)
+    closed_max_deg: float = Field(ge=0, le=90)
+    open_min_deg: float = Field(ge=0, le=90)
+    width_calib_top_frac: float = Field(gt=0, le=1)
+    min_fit_half_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _order(self) -> AlignmentSettings:
+        if self.closed_max_deg >= self.open_min_deg:
+            raise ValueError("alignment.closed_max_deg must be < open_min_deg")
+        return self
 
 
 class FaultSettings(_Section):
@@ -121,6 +138,13 @@ class FaultSettings(_Section):
     low_release_pct: float = Field(gt=0)
     runup_decel_pct: float = Field(gt=0)
     short_follow_pct: float = Field(gt=0)
+    weak_front_arm_pct: float = Field(ge=0)
+    chain_order_tolerance_s: float = Field(ge=0)
+    runup_final_window_s: float = Field(gt=0)
+    runup_speed_smooth_s: float = Field(gt=0)
+    knee_fit_degree: int = Field(ge=1, le=4)
+    chain_window_after_release_s: float = Field(gt=0)
+    severity_full: dict[str, float]
     weights: dict[str, float]
 
     @model_validator(mode="after")
@@ -133,6 +157,21 @@ class FaultSettings(_Section):
             raise ValueError("faults.weights must be non-negative")
         if self.understride_pct >= self.overstride_pct:
             raise ValueError("understride_pct must be < overstride_pct")
+        unknown = set(self.severity_full) - set(FAULT_CODES)
+        if unknown:
+            raise ValueError(f"faults.severity_full has unknown codes: {unknown}")
+        needed = {"UNDERSTRIDE", "LOW_RELEASE", "SHORT_FOLLOW", "WEAK_FRONT_ARM"}
+        missing = needed - set(self.severity_full)
+        if missing:
+            raise ValueError(f"faults.severity_full must set: {sorted(missing)}")
+        if self.severity_full["UNDERSTRIDE"] >= self.understride_pct:
+            raise ValueError("severity_full.UNDERSTRIDE must be below understride_pct")
+        if self.severity_full["LOW_RELEASE"] >= self.low_release_pct:
+            raise ValueError("severity_full.LOW_RELEASE must be below low_release_pct")
+        if self.severity_full["SHORT_FOLLOW"] >= self.short_follow_pct:
+            raise ValueError("severity_full.SHORT_FOLLOW must be below short_follow_pct")
+        if self.severity_full["WEAK_FRONT_ARM"] <= self.weak_front_arm_pct:
+            raise ValueError("severity_full.WEAK_FRONT_ARM must exceed weak_front_arm_pct")
         return self
 
 

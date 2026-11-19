@@ -1,5 +1,34 @@
 # BowlSense — Progress
 
+## Phase 5: Modules A (legality), B (alignment), C (faults) ✅ (2026-11-20)
+
+**Done**
+- **A. Legality** (`analysis/legality.py`): elbow extension uses the spec formula (max over [AH, release] − min up to that max). Angles come from the **unsmoothed** track and are fitted with a cubic over the window (±0.02 s). The elbow straightens in ~50 ms (≈6 frames at 120 fps): general keypoint smoothing flattened it by ~20% (22° read as 17°), and raw max−min picked up noise. Confidence follows the spec's high/medium/low ladder, and is capped at low for non-side views. The note always carries the ICC 3D-testing disclaimer. Front-foot no-ball: given two popping-crease points, the front heel (toe if the heel is missing) must be on the bowler's side (taken from the back foot at BFC); on the line counts as a no-ball.
+- **B. Alignment** (`analysis/alignment.py`): from a front or behind camera, rotation about the vertical axis narrows a body line rather than tilting it, so yaw = arcsin(signed width / full width). The full width is calibrated in the run-up (chest to camera), and each width is divided by that frame's trunk length so perspective (the bowler growing as they approach) cancels. Left/right image order gives the sign (past side-on = negative), with the correct sign for both arms and both frontal views. The action type at BFC is side-on / semi-open / front-on / mixed (closed ≤ 25°, open ≥ 55°, mixed if hip−shoulder > 30°). Counter-rotation = shoulder yaw at BFC − its minimum before FFC. The minimum is read on the unsmoothed track with a quadratic fit (the dip lasts < 0.1 s and smoothing filled it in). Hip–shoulder separation at FFC is also reported. Side view → all angles `None`, "needs front view".
+- **C. Faults** (`analysis/faults.py`): all ten faults are table-driven (view, direction, threshold, measurement, plain-language explanation quoting the numbers). Severity ramps 0→100 from the threshold to 2× the threshold, or to an explicit `faults.severity_full` point for "too low" faults (UNDERSTRIDE 50%, LOW_RELEASE 100%, SHORT_FOLLOW 20%) and the zero-threshold WEAK_FRONT_ARM (10%). These are validated in config. `technique_score = 100 − weighted mean severity` over *measured* faults. Faults needing the other view go into `not_measured` with the reason, and are never scored as 0. New schemas: `AlignmentResult` and `FaultReport` (JSON Schema regenerated).
+
+**Tested**: 132 new tests (488 total; coverage: alignment 98%, legality 98%, faults 95%).
+- Section 10 gates, all for both arms: legality 8° → not flagged, 22° → flagged, measured within ±3° (120 and 240 fps). Counter-rotation within ±5° (4 action types × 3 amounts × 2 views). Mixed action classified as mixed (with 2 px noise). Every fault fires past its threshold and stays quiet below it.
+- Plus: flag decisions under 2 px noise, confidence ladder, no-ball geometry (both arms, toe fallback, validation), hand-computed formula/classifier/severity tests, measurements vs generator truth, view routing, weighted score, missing-keypoint handling, and config validation.
+
+**Accuracy and known limits** (measured on synthetic data, 540 px bowler)
+- Elbow extension: clean data 100% within ±3°. With 1 px noise ≥ 92%; with 2 px noise 76–84% within ±3° (≈2.6° of angle noise per frame from 3 joints, and only 6–12 frames in the window, which is the information limit). The 8°/22° flag decision was correct in every run at every noise level.
+- Counter-rotation: clean data 100% within ±5° (worst −3.4°); with 2 px noise 98%. There's a small consistent underestimate (mean −1.4°) from forward lean shortening the trunk during the run-up calibration. Action type was correct in all 240 runs.
+- Knee collapse: clean data ±3°; with 2 px noise 88% within ±3°.
+- Hip–shoulder separation at FFC is imprecise when the hips are near front-on (arcsin flattens there). It's reported, but no gate uses it.
+
+**Deliberate choices / deviations**
+- CHAIN_ORDER stays side-view as the spec says. Pelvis and trunk rotation timing come from the rate of change of apparent hip/shoulder width (most sensitive near front-on); the arm from peak wrist speed. On synthetic data this got the in-order verdict right in 15 of 16 cases, versus 14 of 16 with front-view yaw rates. It fires when the peaks are out of order by more than 25 ms.
+- RUNUP_DECEL uses its own 0.1 s hip-speed derivative (phase detection's 0.25 s one leaked the post-BFC slowdown in: +2 points of bias).
+- SHORT_FOLLOW measures hip travel from release to the detected follow-through end.
+
+**Generator fixes found during this phase** (all earlier tests still pass)
+- **The kinetic chain was wrong by default**: pelvis rotation peaked with or after the trunk, and well after release for front-on/mixed actions. Fixed: the pelvis turns fastest around FFC, then the trunk, then the arm. A new `pelvis_rotation_delay_s` breaks the order on purpose.
+- **Front knee**: it was locked at 179.8° then jumped 8° at contact; it now lands at 178°. The pelvis now follows the scripted knee angle for the *whole* front-foot plant. Before, it switched curves at release and the near-straight knee jumped 11° in one frame (~1,400°/s).
+- New truth fields: shoulder/hip yaw at BFC, separation at FFC, head offset, frontal trunk tilt, front-wrist height at FFC, and chain peak times.
+
+**Note**: the full test suite now takes ~3 minutes (mostly synthetic clip generation). It may be worth caching generated clips across tests later.
+
 ## Phase 4: Heuristic phase detection ✅ (2026-11-20)
 
 **Done** (`ml/bowlsense/phases/heuristic.py`, all thresholds in `config/default.yaml → phases`)
@@ -91,4 +120,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 5: modules A (legality), B (alignment), C (faults). Note the stride and release-height definitions under Phase 2.
+**Next**: Phase 6: module D (rule-based injury risk, monotonicity tests) and module E (fatigue drift + workload ACWR).

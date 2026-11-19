@@ -1,6 +1,107 @@
 {
   "title": "BowlSense",
   "$defs": {
+    "AlignmentResult": {
+      "additionalProperties": false,
+      "description": "Module B: shoulder and hip alignment through the delivery stride.\n\nAngles are yaw about the vertical axis: 0 = side-on (body line pointing down the pitch),\n90 = front-on, negative = turned past side-on. ``None`` means not measurable from this\ncamera view (see ``notes``).",
+      "properties": {
+        "action_type": {
+          "enum": [
+            "side_on",
+            "semi_open",
+            "front_on",
+            "mixed",
+            "unknown"
+          ],
+          "title": "Action Type",
+          "type": "string"
+        },
+        "shoulder_angle_bfc_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shoulder Angle Bfc Deg"
+        },
+        "hip_angle_bfc_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hip Angle Bfc Deg"
+        },
+        "hip_shoulder_diff_bfc_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hip Shoulder Diff Bfc Deg"
+        },
+        "counter_rotation_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Counter Rotation Deg"
+        },
+        "counter_rotation_flagged": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Counter Rotation Flagged"
+        },
+        "hip_shoulder_sep_ffc_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hip Shoulder Sep Ffc Deg"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action_type",
+        "shoulder_angle_bfc_deg",
+        "hip_angle_bfc_deg",
+        "hip_shoulder_diff_bfc_deg",
+        "counter_rotation_deg",
+        "counter_rotation_flagged",
+        "hip_shoulder_sep_ffc_deg"
+      ],
+      "title": "AlignmentResult",
+      "type": "object"
+    },
     "AngleSeries": {
       "additionalProperties": false,
       "description": "A named angle over time.",
@@ -388,6 +489,47 @@
         "explanation"
       ],
       "title": "Fault",
+      "type": "object"
+    },
+    "FaultReport": {
+      "additionalProperties": false,
+      "description": "Module C: technique faults for one delivery.\n\n``measurements`` holds the value behind every fault that could be measured from this\ncamera view (fired or not); ``not_measured`` maps the other codes to the reason.",
+      "properties": {
+        "faults": {
+          "items": {
+            "$ref": "#/$defs/Fault"
+          },
+          "title": "Faults",
+          "type": "array"
+        },
+        "measurements": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Measurements",
+          "type": "object"
+        },
+        "not_measured": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Not Measured",
+          "type": "object"
+        },
+        "technique_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Technique Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "faults",
+        "measurements",
+        "not_measured",
+        "technique_score"
+      ],
+      "title": "FaultReport",
       "type": "object"
     },
     "FramePose": {

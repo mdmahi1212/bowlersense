@@ -19,6 +19,8 @@ body:
   height_factor: 1.15     # height = vertical ankle-to-nose x this (spec said 1.07; see PROGRESS.md)
   height_top_frac: 0.2    # use the median of the top 20% of run-up frames
   runup_end_before_peak_s: 0.6  # run-up window ends this long before peak bowling-wrist speed
+  ankle_height_pct: 3.9   # ankle joint above the ground, % of height (anthropometry)
+  hand_length_pct: 10.8   # wrist to fingertips, % of height; ball height ~ wrist + hand
 phases:
   use_model: false
   release_refine_frames: 3          # refine release to the wrist-height peak within +-N frames
@@ -38,9 +40,18 @@ phases:
   no_horizontal_motion_confidence: 0.5  # front/behind views: run-up events can't be seen
 legality:
   elbow_extension_threshold_deg: 15.0
+  high_conf_fps: 200          # confidence "high" needs this fps...
+  high_conf_keypoint: 0.7     # ...and mean elbow/wrist keypoint confidence above this
+  medium_conf_fps: 120        # "medium" needs this fps; below it is "low"
+  fit_degree: 3               # elbow angle is fitted with this polynomial around AH..release
+  fit_pad_s: 0.02             # ...extending the fit this far either side of the window
 alignment:
   mixed_threshold_deg: 30
   counter_rotation_flag_deg: 30
+  closed_max_deg: 25          # body line within 25 deg of side-on = "closed"
+  open_min_deg: 55            # body line at least 55 deg towards front-on = "open"
+  width_calib_top_frac: 0.2   # full shoulder/hip width = median of the widest 20% of run-up frames
+  min_fit_half_s: 0.03        # counter-rotation minimum = quadratic fit over +-this around the dip
 faults:
   knee_collapse_deg: 20
   overstride_pct: 90
@@ -50,6 +61,15 @@ faults:
   low_release_pct: 115
   runup_decel_pct: 15
   short_follow_pct: 40
+  weak_front_arm_pct: 0       # front wrist this far (% of height) below its shoulder at FFC
+  chain_order_tolerance_s: 0.025  # out-of-order peaks closer than this are measurement noise
+  runup_final_window_s: 1.5   # "final 3 strides" before BFC
+  runup_speed_smooth_s: 0.1   # hip-speed derivative window for the run-up deceleration check
+  knee_fit_degree: 2          # knee angle fitted on the raw track strictly inside FFC..release
+  chain_window_after_release_s: 0.1
+  # Where severity reaches 100. Faults not listed ramp from threshold to 2x threshold;
+  # "too low" faults (and zero thresholds) need an explicit point.
+  severity_full: {UNDERSTRIDE: 50, LOW_RELEASE: 100, SHORT_FOLLOW: 20, WEAK_FRONT_ARM: 10}
   weights: {KNEE_COLLAPSE: 1.5, OVERSTRIDE: 1, UNDERSTRIDE: 1, HEAD_FALL: 1, LATERAL_FLEXION: 1.5,
             WEAK_FRONT_ARM: 0.7, RUNUP_DECEL: 0.7, LOW_RELEASE: 0.7, CHAIN_ORDER: 1, SHORT_FOLLOW: 0.5}
 injury:

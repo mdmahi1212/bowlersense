@@ -187,6 +187,19 @@ class Fault(_Model):
     explanation: str
 
 
+class FaultReport(_Model):
+    """Module C: technique faults for one delivery.
+
+    ``measurements`` holds the value behind every fault that could be measured from this
+    camera view (fired or not); ``not_measured`` maps the other codes to the reason.
+    """
+
+    faults: list[Fault]
+    measurements: dict[str, float]
+    not_measured: dict[str, str]
+    technique_score: float = Field(ge=0, le=100)
+
+
 class RiskComponent(_Model):
     """One component of the injury-risk model."""
 
@@ -217,6 +230,27 @@ class LegalityResult(_Model):
     confidence: Confidence
     note: str = "2D video screening only. The official ICC test uses 3D motion capture."
     front_foot_no_ball: bool | None = None
+
+
+ActionType = Literal["side_on", "semi_open", "front_on", "mixed", "unknown"]
+
+
+class AlignmentResult(_Model):
+    """Module B: shoulder and hip alignment through the delivery stride.
+
+    Angles are yaw about the vertical axis: 0 = side-on (body line pointing down the pitch),
+    90 = front-on, negative = turned past side-on. ``None`` means not measurable from this
+    camera view (see ``notes``).
+    """
+
+    action_type: ActionType
+    shoulder_angle_bfc_deg: float | None
+    hip_angle_bfc_deg: float | None
+    hip_shoulder_diff_bfc_deg: float | None
+    counter_rotation_deg: float | None
+    counter_rotation_flagged: bool | None
+    hip_shoulder_sep_ffc_deg: float | None
+    notes: list[str] = Field(default_factory=list)
 
 
 class DeliveryMetrics(_Model):
@@ -292,9 +326,11 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     BallTrack,
     AngleSeries,
     Fault,
+    FaultReport,
     RiskComponent,
     InjuryRisk,
     LegalityResult,
+    AlignmentResult,
     DeliveryMetrics,
     FatigueDrift,
     FatigueResult,

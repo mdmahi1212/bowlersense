@@ -193,7 +193,7 @@ def first_sustained(mask: object, hold: int, start: int = 0) -> int | None:
     return None
 
 
-def _hip_speed(seq: PoseSequence, smooth_s: float) -> FloatArray:
+def hip_speed(seq: PoseSequence, smooth_s: float) -> FloatArray:
     """Horizontal hip speed (px/s). Hip translation is a slow signal, so it gets its own,
     longer Savitzky-Golay derivative to keep noise from moving the threshold crossings.
     """
@@ -264,15 +264,15 @@ def detect_phases(
         "bfc",
     )
 
-    hip_speed = _hip_speed(seq, settings.hip_speed_smooth_s)
-    horizontal = seq.view in HORIZONTAL_MOTION_VIEWS and np.isfinite(hip_speed).any()
+    hip_spd = hip_speed(seq, settings.hip_speed_smooth_s)
+    horizontal = seq.view in HORIZONTAL_MOTION_VIEWS and np.isfinite(hip_spd).any()
     if horizontal:
-        peak = float(np.nanmax(hip_speed))
+        peak = float(np.nanmax(hip_spd))
         hold = max(1, round(settings.speed_hold_s * fps))
-        start = first_sustained(hip_speed > settings.run_up_speed_frac * peak, hold)
+        start = first_sustained(hip_spd > settings.run_up_speed_frac * peak, hold)
         run_up_start = 0 if start is None else start
         end = first_sustained(
-            hip_speed < settings.follow_through_speed_frac * peak, hold, release + 1
+            hip_spd < settings.follow_through_speed_frac * peak, hold, release + 1
         )
         follow_end = n - 1 if end is None else end
     else:

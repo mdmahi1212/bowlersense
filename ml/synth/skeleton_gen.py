@@ -68,7 +68,9 @@ AFTER_RELEASE = 1.0
 
 V_PEAK = 3.2  # run-up speed, heights per second (~5.8 m/s for a 1.8 m bowler)
 BASE_ELBOW = 175.0  # elbow angle with the arm "straight" at release
-FRONT_KNEE_AT_FFC = 172.0
+FRONT_KNEE_AT_FFC = 178.0  # nearly straight at contact, as in real fast bowling
+FRONT_PLANT_AFTER_RELEASE = 0.25  # front foot stays planted this long after release
+FOLLOW_KNEE_FLEX = 20.0  # extra front-knee bend while the foot is still planted after release
 FRONT_ELBOW = 165.0
 
 ACTION_YAWS: dict[str, tuple[float, float]] = {
@@ -108,6 +110,12 @@ class SynthParams(BaseModel):
     )
     runup_decel_pct: float = Field(default=5.0, ge=0, le=50)
     follow_through_pct: float = Field(default=80.0, ge=10, le=120)
+    pelvis_rotation_delay_s: float = Field(
+        default=0.0,
+        ge=0,
+        le=0.2,
+        description="Delay pelvis rotation after BFC; large values break the kinetic chain",
+    )
     front_arm_ffc_deg: float = Field(
         default=70.0,
         ge=-90,
@@ -134,6 +142,13 @@ class SynthTruth(BaseModel):
     runup_decel_pct: float
     follow_through_pct: float
     hip_shoulder_sep_bfc_deg: float
+    shoulder_yaw_bfc_deg: float
+    hip_yaw_bfc_deg: float
+    hip_shoulder_sep_ffc_deg: float
+    head_offset_pct: float
+    trunk_tilt_front_deg: float
+    front_wrist_above_shoulder_ffc_pct: float
+    chain_peak_times_s: tuple[float, float, float]
     height_px: float
 
 
@@ -303,10 +318,13 @@ class _Action:
                 (tl.takeoff, 88.0),
                 (tl.bfc - 0.04, hip_b),
                 (tl.bfc, hip_b),
-                (tl.ffc, hip_b + 15.0),
-                (tl.release, max(hip_b + 20.0, 85.0)),
-                (tl.release + 0.3, 130.0),
-                (tl.end, 130.0),
+                # Kinetic chain: the pelvis turns fastest around FFC, before the trunk
+                # (fastest just before release) and the arm (release); it then keeps
+                # turning only slowly through the follow-through.
+                (tl.ffc + 0.02 + p.pelvis_rotation_delay_s, max(hip_b + 25.0, 80.0)),
+                (tl.release + p.pelvis_rotation_delay_s, max(hip_b + 30.0, 95.0)),
+                (tl.release + 0.5 + p.pelvis_rotation_delay_s, 120.0),
+                (tl.end, 120.0),
             ]
         )
         self.lat_flex = _pchip(
@@ -379,6 +397,10 @@ class _Action:
             [
                 (tl.ffc, FRONT_KNEE_AT_FFC),
                 (tl.release, FRONT_KNEE_AT_FFC - p.knee_flex_change_deg),
+                (
+                    tl.release + FRONT_PLANT_AFTER_RELEASE,
+                    FRONT_KNEE_AT_FFC - p.knee_flex_change_deg - FOLLOW_KNEE_FLEX,
+                ),
             ]
         )
         dx_rel = self._solve_front_reach(p.release_height_pct / 100.0)
@@ -394,6 +416,7 @@ class _Action:
         )
         y_ffc = self._pelvis_y_planted(tl.ffc)
         y_rel = self._pelvis_y_planted(tl.release)
+        y_lift = self._pelvis_y_planted(tl.release + FRONT_PLANT_AFTER_RELEASE)
         self._pelvis_y_base = _pchip(
             [
                 (0.0, 0.52),
@@ -403,7 +426,7 @@ class _Action:
                 (tl.bfc, y_bfc),
                 (tl.ffc, y_ffc),
                 (tl.release, y_rel),
-                (tl.release + 0.25, y_rel - 0.03),
+                (tl.release + FRONT_PLANT_AFTER_RELEASE, y_lift),
                 (tl.release + 0.6, 0.50),
                 (tl.end, 0.51),
             ]
@@ -498,7 +521,9 @@ class _Action:
 
     def pelvis(self, t: float) -> FloatArray:
         tl = self.tl
-        if tl.ffc <= t <= tl.release:
+        if tl.ffc <= t <= tl.release + FRONT_PLANT_AFTER_RELEASE:
+            # While the front foot is planted, the pelvis height follows the scripted knee
+            # angle, so the knee never jumps (near-straight knees are very sensitive).
             y = self._pelvis_y_planted(t)
         else:
             y = self._pelvis_y_base(t)
@@ -522,7 +547,9 @@ class _Action:
             lift = max(T_STAND, first[foot] - 0.8 * STEP_PERIOD)
             plants[foot].insert(0, _Plant(-1.0, lift, (px(0.0), z)))
         plants["r"].append(_Plant(tl.bfc, tl.ffc + 0.03, self.back_foot, 0.15))
-        plants["l"].append(_Plant(tl.ffc, tl.release + 0.25, self.front_foot, 0.15))
+        plants["l"].append(
+            _Plant(tl.ffc, tl.release + FRONT_PLANT_AFTER_RELEASE, self.front_foot, 0.15)
+        )
         t_r = tl.release + 0.4
         plants["r"].append(_Plant(t_r, tl.end + 1.0, (px(t_r) + 0.12, -0.05), 0.12))
         t_l = tl.release + 0.65
@@ -743,6 +770,18 @@ def _ground_truth(
     decel_from = clamp(round(tl.decel_start * fps))
     window = speed[decel_from : bfc + 1]
     runup_peak = float(speed[: bfc + 1].max())
+
+    def peak_time(values: FloatArray, lo: int, hi: int) -> float:
+        return (lo + int(np.argmax(np.abs(values[lo : hi + 1])))) / fps
+
+    def yaw_rate(part: str) -> FloatArray:
+        yaws = np.array([line_yaw(f, part) for f in range(n)])
+        return np.asarray(np.gradient(np.unwrap(np.radians(yaws))) * fps, dtype=np.float64)
+
+    chain_hi = clamp(release + round(0.1 * fps))
+    wrist_speed = np.linalg.norm(np.gradient(wrist, axis=0), axis=1) * fps
+    sh_mid = 0.5 * (world[:, idx["l_shoulder"]] + world[:, idx["r_shoulder"]])
+    trunk_vec = sh_mid[release] - pelvis[release]
     truth = SynthTruth(
         elbow_extension_deg=extension,
         counter_rotation_deg=sh_yaws[0] - min(sh_yaws),
@@ -753,6 +792,19 @@ def _ground_truth(
         runup_decel_pct=100.0 * (runup_peak - float(window.min())) / runup_peak,
         follow_through_pct=100.0 * float(pelvis[-1, 0] - pelvis[release, 0]) / stride,
         hip_shoulder_sep_bfc_deg=line_yaw(bfc, "hip") - line_yaw(bfc, "shoulder"),
+        shoulder_yaw_bfc_deg=line_yaw(bfc, "shoulder"),
+        hip_yaw_bfc_deg=line_yaw(bfc, "hip"),
+        hip_shoulder_sep_ffc_deg=line_yaw(ffc, "hip") - line_yaw(ffc, "shoulder"),
+        head_offset_pct=100.0
+        * abs(float(world[release, idx["nose"], 2] - world[release, idx[f"{front}_ankle"], 2])),
+        trunk_tilt_front_deg=float(np.degrees(np.arctan2(abs(trunk_vec[2]), trunk_vec[1]))),
+        front_wrist_above_shoulder_ffc_pct=100.0
+        * float(world[ffc, idx[f"{front}_wrist"], 1] - world[ffc, idx[f"{front}_shoulder"], 1]),
+        chain_peak_times_s=(
+            peak_time(yaw_rate("hip"), bfc, chain_hi),
+            peak_time(yaw_rate("shoulder"), bfc, chain_hi),
+            peak_time(wrist_speed, bfc, chain_hi),
+        ),
         height_px=params.height_px,
     )
     return phases, truth
