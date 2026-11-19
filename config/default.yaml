@@ -12,7 +12,13 @@ pose:
   backend: rtm          # rtm | mediapipe
   min_conf: 0.3
   max_gap_frames: 5
+  savgol_window_s: 0.1  # Savitzky-Golay window ~ fps/10 frames, rounded up to odd
+  savgol_polyorder: 2
   lift_3d: false
+body:
+  height_factor: 1.15     # height = vertical ankle-to-nose x this (spec said 1.07; see PROGRESS.md)
+  height_top_frac: 0.2    # use the median of the top 20% of run-up frames
+  runup_end_before_peak_s: 0.6  # run-up window ends this long before peak bowling-wrist speed
 phases:
   use_model: false
 legality:

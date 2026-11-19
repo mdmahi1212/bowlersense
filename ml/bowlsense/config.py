@@ -63,7 +63,17 @@ class PoseSettings(_Section):
     backend: Literal["rtm", "mediapipe"]
     min_conf: float = Field(ge=0, le=1)
     max_gap_frames: int = Field(ge=0)
+    savgol_window_s: float = Field(gt=0)
+    savgol_polyorder: int = Field(ge=1, le=5)
     lift_3d: bool
+
+
+class BodySettings(_Section):
+    """Body-scale estimation."""
+
+    height_factor: float = Field(gt=0)
+    height_top_frac: float = Field(gt=0, le=1)
+    runup_end_before_peak_s: float = Field(ge=0)
 
 
 class PhaseSettings(_Section):
@@ -271,6 +281,7 @@ class Settings(_Section):
 
     video: VideoSettings
     pose: PoseSettings
+    body: BodySettings
     phases: PhaseSettings
     legality: LegalitySettings
     alignment: AlignmentSettings

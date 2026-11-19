@@ -345,8 +345,11 @@ class _Action:
                 (tl.bound, 40.0),
                 (tl.bfc, 80.0),
                 (tl.ffc, p.front_arm_ffc_deg),
-                (tl.release, -40.0),
-                (tl.release + 0.2, -100.0),
+                # Pull-down at well under half the bowling arm's angular speed, as in real
+                # fast bowling; the front arm keeps folding in through follow-through.
+                (tl.release, p.front_arm_ffc_deg - 45.0),
+                (tl.release + 0.2, -60.0),
+                (tl.release + 0.45, -95.0),
                 (tl.end, -95.0),
             ]
         )

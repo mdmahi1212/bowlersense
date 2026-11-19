@@ -1,5 +1,21 @@
 # BowlSense — Progress
 
+## Phase 3: Geometry + smoothing + body ✅ (2026-11-19)
+
+**Done**
+- `geometry/angles.py`: joint angle (clipped `arccos`, never NaN on collinear points), segment angle / elevation / line tilt (image y-down handled; up = positive; range (−180, 180]), angular velocity (unwraps across ±180°), linear speed and velocity computed per valid run (NaN gaps are never bridged), `keypoint_array`/`keypoint_track` (missing = NaN), and `AngleSeries` conversion (NaN → None). fps ≤ 0 or NaN raises.
+- `pose/smoothing.py`: confidence gating (`pose.min_conf`) → linear fill of interior gaps ≤ `max_gap_frames` (edges are never extrapolated; a filled sample gets the lower neighbour's confidence) → Savitzky–Golay per contiguous run (window = fps × `savgol_window_s`, rounded to odd; polyorder 2). It never smooths across a long gap. z is smoothed when present.
+- `geometry/body.py`: role resolution (`joint(arm, "front", "ankle")` → `l_ankle` for a right-armer), bowling-arm detection (higher peak wrist speed), height estimate, `% of height` conversion, and `mirror_sequence` (x → width − x, l/r swapped, arm flipped; applying it twice is the identity).
+- Config additions: `pose.savgol_window_s`, `pose.savgol_polyorder`, and a new `body` section.
+
+**Tested**: 101 new tests (290 total). Hand-computed angles (90/180/0/45/120°, 3D, scale-invariance, float-noise collinearity), ±180° unwrap, NaN runs, gap filling at exactly/over the limit, no smoothing across gaps, polynomial preservation, noise reduction on synthetic data (noise and smoothing bias checked separately), dropout filling. **Gate: bowling-arm detection is 100% correct over 72 synthetic cases** (2 arms × 3 views × 4 noise/dropout levels × 3 seeds) with a margin over 1.3. Height is within 2% across views, arms, fps, noise and stride.
+
+**Deliberate deviations from the spec (all in config, so they can be changed)**
+- **Height factor 1.15, not 1.07, on the *vertical* ankle-to-nose distance.** With the spec's straight-line distance × 1.07, height came out 5% low in side view and 7% low in front view. The nose sits about 0.89 × stature above the ankle bone, so 1.07 can't be right, and every "% of height" metric (stride, release height, head offset) would have been inflated by 5–7%. The vertical distance is identical from every camera view. 1.15 = anthropometry plus typical running posture, rounded (not fitted exactly to the generator: −0.7% on synthetic data). Re-tune on real labelled clips in Phase 16.
+- **Arm detection uses absolute wrist speed, as specified.** I tried wrist speed relative to the shoulder and relative to the pelvis: both were *worse* from the front and behind (trunk rotation moves the shoulders sideways), down to a wrong call at ratio 0.94.
+
+**Generator fix found during this phase**: the synthetic front arm pulled down at 1,493°/s, nearly as fast as the bowling arm (2,188°/s). That's unrealistic: real front-arm pull-down is well under half. It's slowed to 768°/s. This raised the arm-detection margin from 1.1 to about 1.5 in front/behind views. All Phase 2 tests still pass.
+
 ## Phase 2: Synthetic generator + render_to_video ✅ (2026-11-19)
 
 **Done** (`ml/synth/skeleton_gen.py`)
@@ -44,4 +60,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 3: geometry + smoothing + body (angles, velocities, height, bowling-arm detection, mirroring).
+**Next**: Phase 4: heuristic phase detection (Section 10 phase tests: ±2 frames at 120 fps with 2 px noise; ±3 frames with 10% dropout; left and right arm).
