@@ -1,5 +1,30 @@
 # BowlSense — Progress
 
+## Phase 7: Real-video front end ✅ (2026-11-20)
+
+**Installed** (pinned in `ml/requirements.txt` from `pip freeze`): rtmlib 0.0.16, onnxruntime 1.32.0, mediapipe 1.2.3, ultralytics 8.4.215, **CPU** PyTorch 2.15.0 / torchvision 0.29.2 (from the PyTorch CPU index, a fraction of the CUDA build's size; GPU users install the matching CUDA build), and lap 0.5.14 (ByteTrack).
+
+**Model weights**: `scripts/download_models.py` fetched 3 files (~67 MB) into `models/` (gitignored), with SHA-256 in `models/MANIFEST.json`: RTMPose-m Halpe-26 ONNX (from download.openmmlab.com, the URL rtmlib itself uses), `yolo11n.pt` (ultralytics/assets v8.3.0), `pose_landmarker_full.task` (MediaPipe models bucket). Halpe-26 was chosen because it includes **heels and big toes**, which the contact and no-ball checks need. **All three models load and run with `BOWLSENSE_OFFLINE=1`.**
+
+**Done**
+- `io/video.py`: probe (fps/size/frames), a frame iterator (the clip is never loaded fully; the capture is always released), single-frame read, and an image loader (handles non-ASCII Windows paths). Extension checks raise `UnsupportedMediaError`.
+- `io/quality.py`: spec checks. < 60 fps → `LowFpsError` unless `--allow-low-fps`; 60–119 fps, < 720p, bowler in < 70% of frames, or mean keypoint confidence < 0.5 → warnings. **Camera-view estimate**: shoulder width ÷ body height in the run-up (narrow = side). Front vs behind comes from whether the bowler grows (approaching) or shrinks, with left/right shoulder order as the fallback. 6/6 correct on synthetic views × arms.
+- `detect/person.py`: YOLO + ByteTrack person tracks (a fresh tracker per video; GPU if available, else CPU with a log line; telemetry sync off). Bowler = largest horizontal displacement + robust peak speed (95th percentile, so one ID-switch jump can't win); `--bowler-track-id` override. Missing weights → `ModelNotFoundError` telling you to run the download script.
+- `pose/`: `PoseBackend` protocol, 20% crop padding, `load_backend("rtm" | "mediapipe")`. RTMPose maps Halpe-26 → our 21 names (big toe = toe); MediaPipe uses the Tasks API (1.x removed `mp.solutions`) and maps 33 landmarks → our 21 names, crop-normalised → full-frame. Scores are clamped to [0, 1].
+- `pipeline.py`: `extract_pose()` (probe + quality → track → select bowler → pose per frame → detect arm → estimate view, or `--pose-from-json`, which checks size and fps match the video) and `analyze_delivery()` (phases + modules A–D + fatigue inputs).
+- `cli.py`: `python -m bowlsense.cli analyze VIDEO --out DIR [--allow-low-fps] [--backend rtm|mediapipe] [--bowler-track-id N] [--pose-from-json FILE] [--config FILE] [-v]`. It writes `pose.json` + `result.json`. Errors print a clear message and exit with code 2. `--calib` and `--no-llm` arrive with the features they control (Phases 9 and 11).
+
+**Tested**: 27 new tests (570 passed, 1 skipped).
+- **Gate**: `cli analyze` on a rendered synthetic video with `--pose-from-json` detects the arm and side view by itself, phases within ±2, 22° flagged. `--backend mediapipe` (and `rtm`) through the real-video path: the real model loads and runs on every bowler frame, with ground-truth keypoints fed to the analysis (pose models don't detect stick figures).
+- Plus: video I/O and errors, quality checks, view estimation, bowler selection (runner beats umpire/fielder, override, errors), keypoint mappings, crop padding, missing-model message, and **both backends + the YOLO tracker run with the network blocked**.
+- `tests/data/real/` is empty, so the real-clip test skips. Drop clips there and it runs automatically.
+
+**Bug found and fixed: the synthetic figure was mirror-imaged.** I'd declared "+Z = the bowler's left when facing +X", but in a right-handed frame the left is −Z, so every synthetic front/behind view was a mirror of what a real camera sees. Alignment's sign convention had been derived from those images, so on **real** front-view footage a right-armer's counter-rotation would have come out with the wrong sign. Fixed in the generator (left = −Z, chest = line × up, feet mirrored, truth sign) and in alignment (re-derived: front-on, a right-armer's bowling shoulder is on the image *left*). Side-view measurements weren't affected; all earlier tests pass.
+
+**Also found**: ultralytics `pip install`s `lap` *at runtime* the first time ByteTrack runs. The offline guard blocked it (as designed); `lap` is now installed and pinned at setup.
+
+**Not yet verified (needs real footage)**: pose accuracy, bowler selection and view estimation on real clips. The YOLO detection-unpacking lines are only exercised by real footage (a stick figure isn't detected as a person). The spec's evaluation script (Phase 16) is the place to measure this once clips are available.
+
 ## Phase 6: Modules D (injury risk) and E (fatigue + workload) ✅ (2026-11-20)
 
 **Done**
@@ -137,4 +162,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 7: real-video front end (video I/O, quality checks, YOLO person tracking, rtmlib pose + MediaPipe fallback, keypoint mapping, `cli analyze` with `--pose-from-json`). First phase that downloads model weights (via `scripts/download_models.py`).
+**Next**: Phase 8: rendering (overlay MP4 playable in Chrome: H.264 + faststart via ffmpeg, keyframes, clipping a multi-ball video, PDF with ReportLab). ffmpeg is not installed yet.

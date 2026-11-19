@@ -1,11 +1,22 @@
 -r requirements.txt
+ast-serialize==0.13.1
 black==26.10.1
+click==8.5.1
 coverage==7.17.3
+iniconfig==2.3.1
+librt==0.16.0
+mypy-extensions==1.2.0
 mypy==2.4.1
 numpy-typing-compat==20251206.2.4
 optype==0.17.1
+packaging==26.3
+pathspec==1.1.1
+platformdirs==4.14.7
+pluggy==1.7.0
+pygments==2.21.0
 pytest-cov==7.1.0
 pytest==9.2.0
+pytokens==0.4.1
 ruff==0.17.5
 scipy-stubs==1.17.1.5
 types-pyyaml==6.0.12.20261113

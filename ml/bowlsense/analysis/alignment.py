@@ -31,8 +31,13 @@ FRONTAL_VIEWS = frozenset({"front", "behind"})
 
 
 def _orientation_sign(seq: PoseSequence) -> float:
-    """+1 when (bowling side x - front side x) grows with yaw towards front-on."""
-    arm = 1.0 if seq.bowling_arm == "right" else -1.0
+    """Sign that makes ``sign * (bowling-side x - front-side x)`` grow towards front-on.
+
+    A right-arm bowler seen from the front (facing the camera) shows the bowling (right)
+    shoulder on the image *left*, so the raw difference is negative when front-on: sign -1.
+    Left-arm bowlers and the behind view each flip it.
+    """
+    arm = -1.0 if seq.bowling_arm == "right" else 1.0
     view = 1.0 if seq.view == "front" else -1.0
     return arm * view
 

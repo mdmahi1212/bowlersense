@@ -65,6 +65,8 @@ class VideoSettings(_Section):
     min_height_px: int = Field(gt=0)
     min_bowler_visible_frac: float = Field(ge=0, le=1)
     min_mean_keypoint_conf: float = Field(ge=0, le=1)
+    front_view_width_ratio: float = Field(gt=0)
+    approach_size_change: float = Field(gt=0)
 
     @model_validator(mode="after")
     def _fps_order(self) -> VideoSettings:
@@ -73,10 +75,23 @@ class VideoSettings(_Section):
         return self
 
 
+class DetectSettings(_Section):
+    """Person (and later ball) detection and tracking."""
+
+    yolo_model: str = Field(min_length=1)
+    person_conf: float = Field(gt=0, lt=1)
+    tracker: str = Field(min_length=1)
+    min_track_frames: int = Field(ge=1)
+
+
 class PoseSettings(_Section):
     """Pose backend and keypoint cleaning."""
 
     backend: Literal["rtm", "mediapipe"]
+    crop_padding: float = Field(ge=0, le=1)
+    rtm_model: str = Field(min_length=1)
+    rtm_input_size: tuple[int, int]
+    mediapipe_model: str = Field(min_length=1)
     min_conf: float = Field(ge=0, le=1)
     max_gap_frames: int = Field(ge=0)
     savgol_window_s: float = Field(gt=0)
@@ -383,6 +398,7 @@ class Settings(_Section):
     """All YAML-driven settings."""
 
     video: VideoSettings
+    detect: DetectSettings
     pose: PoseSettings
     body: BodySettings
     phases: PhaseSettings

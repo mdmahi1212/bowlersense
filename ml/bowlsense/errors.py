@@ -77,6 +77,18 @@ class ModelDownloadError(BowlSenseError):
         )
 
 
+class ModelNotFoundError(BowlSenseError):
+    """A model weights file hasn't been downloaded into ``models/`` yet."""
+
+    def __init__(self, filename: str, models_dir: object) -> None:
+        self.filename = filename
+        super().__init__(
+            f"Model file '{filename}' is missing from {models_dir}. Run "
+            "`python scripts/download_models.py` once while online; after that BowlSense "
+            "works offline."
+        )
+
+
 class DatabaseError(BowlSenseError):
     """A database operation failed."""
 

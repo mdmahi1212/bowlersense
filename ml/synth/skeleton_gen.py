@@ -8,7 +8,8 @@ Every parameter a later module measures is set here, so tests can check the modu
 back. Ground-truth phase frames are reported alongside the sequence.
 
 World frame (units of standing height H = 1): +X is the run direction (towards the batter),
-+Y is up, +Z is the bowler's left when facing +X. The action is built for a right-arm bowler
++Y is up, +Z is the bowler's RIGHT when facing +X (right-handed: right = forward x up), so
+the left side is -Z. The action is built for a right-arm bowler
 and mirrored (Z -> -Z, left/right names swapped) for a left-arm bowler.
 """
 
@@ -179,9 +180,12 @@ def _unit(v: FloatArray) -> FloatArray:
 
 
 def _yaw_dir(yaw_deg: float) -> FloatArray:
-    """Right-to-left body line for a given yaw (0 = side-on along +X, 90 = front-on)."""
+    """Right-to-left body line for a given yaw (0 = side-on along +X, 90 = front-on).
+
+    Front-on (facing +X) the bowler's left is -Z, so the line points to -Z.
+    """
     r = np.radians(yaw_deg)
-    return np.array([np.cos(r), 0.0, np.sin(r)])
+    return np.array([np.cos(r), 0.0, -np.sin(r)])
 
 
 class _Curve:
@@ -406,7 +410,7 @@ class _Action:
         dx_rel = self._solve_front_reach(p.release_height_pct / 100.0)
         front_hip_rel = self._hip_joint(tl.release, "l", 0.0)
         self.front_foot = (float(front_hip_rel[0] + dx_rel), float(front_hip_rel[2]))
-        self.back_foot = (self.front_foot[0] - stride, -0.03)
+        self.back_foot = (self.front_foot[0] - stride, 0.03)
         self._check_reach(tl.ffc)
 
         # Low enough that the back foot stays planted for the first 50 ms after contact.
@@ -540,10 +544,10 @@ class _Action:
         plants: dict[str, list[_Plant]] = {"l": [], "r": []}
         for k, t in enumerate(tl.steps):
             foot = "l" if (N_RUNUP_STEPS - 1 - k) % 2 == 0 else "r"
-            z = 0.05 if foot == "l" else -0.05
+            z = -0.05 if foot == "l" else 0.05
             plants[foot].append(_Plant(t, t + CONTACT, (px(t) + 0.10, z)))
         first = {f: plants[f][0].t_land for f in plants}
-        for foot, z in (("l", 0.06), ("r", -0.06)):
+        for foot, z in (("l", -0.06), ("r", 0.06)):
             lift = max(T_STAND, first[foot] - 0.8 * STEP_PERIOD)
             plants[foot].insert(0, _Plant(-1.0, lift, (px(0.0), z)))
         plants["r"].append(_Plant(tl.bfc, tl.ffc + 0.03, self.back_foot, 0.15))
@@ -551,9 +555,9 @@ class _Action:
             _Plant(tl.ffc, tl.release + FRONT_PLANT_AFTER_RELEASE, self.front_foot, 0.15)
         )
         t_r = tl.release + 0.4
-        plants["r"].append(_Plant(t_r, tl.end + 1.0, (px(t_r) + 0.12, -0.05), 0.12))
+        plants["r"].append(_Plant(t_r, tl.end + 1.0, (px(t_r) + 0.12, 0.05), 0.12))
         t_l = tl.release + 0.65
-        plants["l"].append(_Plant(t_l, tl.end + 1.0, (px(t_l) + 0.10, 0.05), 0.08))
+        plants["l"].append(_Plant(t_l, tl.end + 1.0, (px(t_l) + 0.10, -0.05), 0.08))
         return plants
 
     def ankle_target(self, foot: str, t: float) -> FloatArray:
@@ -595,14 +599,14 @@ class _Action:
         """Shoulders, arms and head for a pelvis centre position."""
         up_world = np.array([0.0, 1.0, 0.0])
         u_flat = _yaw_dir(self.sh_yaw(t))
-        f_flat = np.cross(up_world, u_flat)
+        f_flat = np.cross(u_flat, up_world)  # chest direction
         trunk_up = _unit(
             up_world
             + np.tan(np.radians(self.lat_flex(t))) * u_flat
             + np.tan(np.radians(self.fwd_flex(t))) * f_flat
         )
         u = _unit(u_flat - float(np.dot(u_flat, trunk_up)) * trunk_up)
-        f = np.cross(trunk_up, u)
+        f = np.cross(u, trunk_up)
         sh_c = pelvis + TRUNK * trunk_up
         pts: dict[str, FloatArray] = {
             "l_shoulder": sh_c + 0.5 * SHOULDER_WIDTH * u,
@@ -761,7 +765,7 @@ def _ground_truth(
 
     def line_yaw(f: int, joint: str) -> float:
         d = world[f, idx[f"{front}_{joint}"]] - world[f, idx[f"{back}_{joint}"]]
-        z = d[2] if params.bowling_arm == "right" else -d[2]
+        z = -d[2] if params.bowling_arm == "right" else d[2]
         return float(np.degrees(np.arctan2(z, d[0])))
 
     sh_yaws = [line_yaw(f, "shoulder") for f in range(bfc, ffc + 1)]

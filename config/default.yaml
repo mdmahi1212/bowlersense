@@ -8,8 +8,19 @@ video:
   min_height_px: 720
   min_bowler_visible_frac: 0.70
   min_mean_keypoint_conf: 0.5
+  front_view_width_ratio: 0.12   # shoulder width / body height above this in the run-up = front/behind
+  approach_size_change: 0.15     # bowler grows (front) / shrinks (behind) by this fraction over the run-up
+detect:
+  yolo_model: yolo11n.pt          # in models/; person (class 0) and sports ball (class 32)
+  person_conf: 0.3
+  tracker: bytetrack.yaml         # bundled with ultralytics
+  min_track_frames: 10            # shorter tracks are ignored when picking the bowler
 pose:
   backend: rtm          # rtm | mediapipe
+  crop_padding: 0.2     # bowler bbox is padded by 20% on each side before pose estimation
+  rtm_model: rtmpose-m_halpe26_256x192.onnx       # in models/
+  rtm_input_size: [192, 256]                     # width, height
+  mediapipe_model: pose_landmarker_full.task      # in models/
   min_conf: 0.3
   max_gap_frames: 5
   savgol_window_s: 0.1  # Savitzky-Golay window ~ fps/10 frames, rounded up to odd

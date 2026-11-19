@@ -31,3 +31,9 @@ files = ["bowlsense", "synth", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[[tool.mypy.overrides]]
+# Third-party packages without type information; our own code stays strict.
+module = ["rtmlib", "rtmlib.*", "onnxruntime", "onnxruntime.*", "mediapipe", "mediapipe.*", "ultralytics", "ultralytics.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
