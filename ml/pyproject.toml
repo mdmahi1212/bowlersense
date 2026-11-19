@@ -26,7 +26,7 @@ target-version = ["py311"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["bowlsense", "tests"]
+files = ["bowlsense", "synth", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

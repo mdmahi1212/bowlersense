@@ -278,3 +278,14 @@ def test_migration_failure_wrapped(tmp_path: Path) -> None:
     with pytest.raises(DatabaseError, match="no-such-rev"):
         upgrade(engine, "no-such-rev")
     engine.dispose()
+
+
+def test_coach_messages_keep_insert_order_on_equal_timestamps(repo: Repository) -> None:
+    s = repo.create_session("raw/v.mp4")
+    for i in range(10):
+        repo.add_coach_message(s.id, "user" if i % 2 == 0 else "assistant", str(i))
+    with repo.engine.begin() as conn:
+        conn.execute(text("UPDATE coach_messages SET created_at = '2026-01-01 00:00:00.000000'"))
+    msgs = repo.list_coach_messages(s.id)
+    assert len({m.created_at for m in msgs}) == 1
+    assert [m.content for m in msgs] == [str(i) for i in range(10)]

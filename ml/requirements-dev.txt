@@ -2,7 +2,10 @@
 black==26.10.1
 coverage==7.17.3
 mypy==2.4.1
-pytest==9.2.0
+numpy-typing-compat==20251206.2.4
+optype==0.17.1
 pytest-cov==7.1.0
+pytest==9.2.0
 ruff==0.17.5
+scipy-stubs==1.17.1.5
 types-pyyaml==6.0.12.20261113

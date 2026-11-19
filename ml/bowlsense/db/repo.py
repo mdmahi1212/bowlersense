@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
-from sqlalchemy import Engine, delete, select, text
+from sqlalchemy import Engine, delete, literal_column, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
@@ -323,7 +323,7 @@ class Repository:
             rows = s.scalars(
                 select(m.CoachMessage)
                 .where(m.CoachMessage.session_id == session_id)
-                .order_by(m.CoachMessage.created_at, m.CoachMessage.id)
+                .order_by(m.CoachMessage.created_at, literal_column("coach_messages.rowid"))
             ).all()
             return [CoachMessageRecord.model_validate(r) for r in rows]
 

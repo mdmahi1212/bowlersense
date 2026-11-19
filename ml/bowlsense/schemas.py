@@ -38,6 +38,32 @@ KEYPOINT_NAMES: tuple[str, ...] = (
     "r_toe",
 )
 
+SKELETON_EDGES: tuple[tuple[str, str], ...] = (
+    ("nose", "l_eye"),
+    ("nose", "r_eye"),
+    ("l_eye", "l_ear"),
+    ("r_eye", "r_ear"),
+    ("l_shoulder", "r_shoulder"),
+    ("l_shoulder", "l_elbow"),
+    ("l_elbow", "l_wrist"),
+    ("r_shoulder", "r_elbow"),
+    ("r_elbow", "r_wrist"),
+    ("l_shoulder", "l_hip"),
+    ("r_shoulder", "r_hip"),
+    ("l_hip", "r_hip"),
+    ("l_hip", "l_knee"),
+    ("l_knee", "l_ankle"),
+    ("r_hip", "r_knee"),
+    ("r_knee", "r_ankle"),
+    ("l_ankle", "l_heel"),
+    ("l_ankle", "l_toe"),
+    ("l_heel", "l_toe"),
+    ("r_ankle", "r_heel"),
+    ("r_ankle", "r_toe"),
+    ("r_heel", "r_toe"),
+)
+"""Bones drawn by renderers (pairs of keypoint names)."""
+
 View = Literal["side", "front", "behind", "unknown"]
 Arm = Literal["right", "left"]
 RiskBand = Literal["low", "medium", "high"]
