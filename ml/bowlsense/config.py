@@ -32,6 +32,22 @@ INJURY_COMPONENTS: tuple[str, ...] = (
     "side_strain",
     "fatigue_modifier",
 )
+INJURY_DRIVERS: tuple[str, ...] = (
+    "counter_rotation_deg",
+    "lateral_flexion_deg",
+    "knee_collapse_deg",
+    "stride_pct",
+    "arm_slot_deg",
+    "arm_angular_velocity_deg_s",
+    "trunk_rotation_speed_deg_s",
+    "fatigue_index",
+)
+FATIGUE_METRICS: tuple[str, ...] = (
+    "runup_speed",
+    "release_height",
+    "wrist_speed",
+    "technique_score",
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "default.yaml"
@@ -187,11 +203,17 @@ class InjurySettings(_Section):
 
     weights: dict[str, float]
     bands: InjuryBands
+    drivers: dict[str, tuple[float, float]]
 
     @model_validator(mode="after")
     def _check(self) -> InjurySettings:
         if set(self.weights) != set(INJURY_COMPONENTS):
             raise ValueError(f"injury.weights must have exactly the keys {INJURY_COMPONENTS}")
+        if set(self.drivers) != set(INJURY_DRIVERS):
+            raise ValueError(f"injury.drivers must have exactly the keys {INJURY_DRIVERS}")
+        bad = [k for k, (lo, hi) in self.drivers.items() if not lo < hi]
+        if bad:
+            raise ValueError(f"injury.drivers bounds must be [low, high] with low < high: {bad}")
         if abs(sum(self.weights.values()) - 1.0) > 1e-6:
             raise ValueError("injury.weights must sum to 1.0")
         if self.bands.low >= self.bands.high:
@@ -204,12 +226,36 @@ class FatigueSettings(_Section):
 
     baseline_deliveries: int = Field(ge=1)
     alert_index: float = Field(ge=0, le=100)
+    recent_deliveries: int = Field(ge=1)
+    fault_increase_alert: int = Field(ge=1)
+    full_drop_pct: dict[str, float]
+    weights: dict[str, float]
+
+    @model_validator(mode="after")
+    def _check(self) -> FatigueSettings:
+        for name, table in (("full_drop_pct", self.full_drop_pct), ("weights", self.weights)):
+            if set(table) != set(FATIGUE_METRICS):
+                raise ValueError(f"fatigue.{name} must have exactly the keys {FATIGUE_METRICS}")
+        if any(v <= 0 for v in self.full_drop_pct.values()):
+            raise ValueError("fatigue.full_drop_pct values must be positive")
+        if any(v < 0 for v in self.weights.values()) or sum(self.weights.values()) <= 0:
+            raise ValueError("fatigue.weights must be non-negative with a positive sum")
+        return self
 
 
 class WorkloadSettings(_Section):
     """Acute:chronic workload ratio."""
 
     acwr_flag: float = Field(gt=0)
+    acute_days: int = Field(ge=1)
+    chronic_days: int = Field(ge=1)
+    min_history_days: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def _check(self) -> WorkloadSettings:
+        if self.acute_days >= self.chronic_days:
+            raise ValueError("workload.acute_days must be < chronic_days")
+        return self
 
 
 class LengthZones(_Section):

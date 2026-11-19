@@ -384,6 +384,20 @@
         "fault_count_delta": {
           "title": "Fault Count Delta",
           "type": "integer"
+        },
+        "fatigue_index": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fatigue Index"
         }
       },
       "required": [
@@ -395,6 +409,76 @@
         "fault_count_delta"
       ],
       "title": "FatigueDrift",
+      "type": "object"
+    },
+    "FatigueInput": {
+      "additionalProperties": false,
+      "description": "Per-delivery numbers the fatigue module tracks. ``None`` = not measured.",
+      "properties": {
+        "delivery_idx": {
+          "minimum": 0,
+          "title": "Delivery Idx",
+          "type": "integer"
+        },
+        "runup_speed_h_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runup Speed H S"
+        },
+        "release_height_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Release Height Pct"
+        },
+        "wrist_speed_h_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wrist Speed H S"
+        },
+        "technique_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Technique Score"
+        },
+        "fault_count": {
+          "minimum": 0,
+          "title": "Fault Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "delivery_idx",
+        "fault_count"
+      ],
+      "title": "FatigueInput",
       "type": "object"
     },
     "FatigueResult": {
@@ -428,6 +512,13 @@
             "type": "string"
           },
           "title": "Alert Reasons",
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
           "type": "array"
         }
       },
@@ -570,6 +661,122 @@
       "title": "FramePose",
       "type": "object"
     },
+    "InjuryFeatures": {
+      "additionalProperties": false,
+      "description": "Inputs to the injury-risk model. ``None`` = not measurable from this clip/view.",
+      "properties": {
+        "counter_rotation_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Counter Rotation Deg"
+        },
+        "mixed_action": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mixed Action"
+        },
+        "lateral_flexion_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lateral Flexion Deg"
+        },
+        "knee_collapse_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Knee Collapse Deg"
+        },
+        "stride_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stride Pct"
+        },
+        "arm_slot_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arm Slot Deg"
+        },
+        "arm_angular_velocity_deg_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arm Angular Velocity Deg S"
+        },
+        "trunk_rotation_speed_deg_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trunk Rotation Speed Deg S"
+        },
+        "fatigue_index": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fatigue Index"
+        }
+      },
+      "title": "InjuryFeatures",
+      "type": "object"
+    },
     "InjuryRisk": {
       "additionalProperties": false,
       "description": "Rule-based injury-risk estimate (not medical advice).",
@@ -601,6 +808,13 @@
             "type": "string"
           },
           "title": "Top Drivers",
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
           "type": "array"
         },
         "disclaimer": {

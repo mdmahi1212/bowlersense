@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
-from sqlalchemy import Engine, delete, literal_column, select, text
+from sqlalchemy import Engine, delete, func, literal_column, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
@@ -326,6 +326,35 @@ class Repository:
                 .order_by(m.CoachMessage.created_at, literal_column("coach_messages.rowid"))
             ).all()
             return [CoachMessageRecord.model_validate(r) for r in rows]
+
+    def bowler_ball_history(
+        self, bowler_id: str, exclude_session_id: str | None = None
+    ) -> list[tuple[date, int]]:
+        """``(day, balls)`` per finished session of a bowler, for workload (module E).
+
+        The day is the session's ``recorded_at`` (or ``created_at`` when unknown); balls are
+        its stored deliveries.
+        """
+        with self._tx() as s:
+            self._get(s, m.Bowler, "bowler", bowler_id)
+            rows = s.execute(
+                select(
+                    m.Session.id,
+                    m.Session.recorded_at,
+                    m.Session.created_at,
+                    func.count(m.Delivery.id),
+                )
+                .outerjoin(m.Delivery, m.Delivery.session_id == m.Session.id)
+                .where(m.Session.bowler_id == bowler_id, m.Session.status == "done")
+                .group_by(m.Session.id)
+            ).all()
+        out = []
+        for sid, recorded, created, balls in rows:
+            if sid == exclude_session_id:
+                continue
+            when = _as_utc(recorded if recorded is not None else created)
+            out.append((when.date(), int(balls)))
+        return sorted(out)
 
     def count_rows(self, table: str) -> int:
         """Return the number of rows in ``table`` (used by tests and the settings page)."""

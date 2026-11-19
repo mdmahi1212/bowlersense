@@ -216,9 +216,24 @@ class InjuryRisk(_Model):
     band: RiskBand
     components: list[RiskComponent]
     top_drivers: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
     disclaimer: str = (
         "Rule-based screening estimate, not a trained medical model and not medical advice."
     )
+
+
+class InjuryFeatures(_Model):
+    """Inputs to the injury-risk model. ``None`` = not measurable from this clip/view."""
+
+    counter_rotation_deg: float | None = None
+    mixed_action: bool | None = None
+    lateral_flexion_deg: float | None = None
+    knee_collapse_deg: float | None = None
+    stride_pct: float | None = None
+    arm_slot_deg: float | None = None
+    arm_angular_velocity_deg_s: float | None = None
+    trunk_rotation_speed_deg_s: float | None = None
+    fatigue_index: float | None = None
 
 
 class LegalityResult(_Model):
@@ -272,6 +287,17 @@ class DeliveryMetrics(_Model):
     angles: list[AngleSeries]
 
 
+class FatigueInput(_Model):
+    """Per-delivery numbers the fatigue module tracks. ``None`` = not measured."""
+
+    delivery_idx: int = Field(ge=0)
+    runup_speed_h_s: float | None = None
+    release_height_pct: float | None = None
+    wrist_speed_h_s: float | None = None
+    technique_score: float | None = None
+    fault_count: int = Field(ge=0)
+
+
 class FatigueDrift(_Model):
     """Percent change of one delivery's metrics versus the session baseline."""
 
@@ -281,6 +307,7 @@ class FatigueDrift(_Model):
     wrist_speed_pct: float | None
     technique_score_pct: float | None
     fault_count_delta: int
+    fatigue_index: float | None = Field(default=None, ge=0, le=100)
 
 
 class FatigueResult(_Model):
@@ -291,6 +318,7 @@ class FatigueResult(_Model):
     fatigue_index: float = Field(ge=0, le=100)
     alert: bool
     alert_reasons: list[str]
+    notes: list[str] = Field(default_factory=list)
 
 
 class WorkloadResult(_Model):
@@ -329,9 +357,11 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     FaultReport,
     RiskComponent,
     InjuryRisk,
+    InjuryFeatures,
     LegalityResult,
     AlignmentResult,
     DeliveryMetrics,
+    FatigueInput,
     FatigueDrift,
     FatigueResult,
     WorkloadResult,

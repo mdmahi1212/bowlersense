@@ -1,5 +1,22 @@
 # BowlSense — Progress
 
+## Phase 6: Modules D (injury risk) and E (fatigue + workload) ✅ (2026-11-20)
+
+**Done**
+- **D. Injury risk** (`analysis/injury.py`): a transparent rule-based model, exactly the spec's table. Each driver scores 0→100 linearly between its `injury.drivers` bounds (mixed action: yes = 100). A component = the mean of the drivers it could measure; overall = weighted sum, **renormalised over the components that had data**. Missing ones are listed in `notes` with the share of the model used (e.g. "uses 45% of the model" from a side-only clip), never counted as zero risk. Bands: < 35 low, 35–65 medium, > 65 high. Top 3 elevated drivers in plain words (lateral flexion feeds two components but is listed once). The disclaimer ("not a trained medical model … not medical advice") is always present. `injury_features()` builds the inputs from modules A–C plus three new measurements: arm slot (bowling arm angle from vertical at release, front view), peak upper-arm angular velocity (side view), and peak trunk rotation speed (front view).
+- **E. Fatigue** (`analysis/fatigue.py`): the baseline is the mean of deliveries 1–6. Each later delivery gets the % change in run-up speed, release height, peak wrist speed and technique score; **only drops count** (a drop of `full_drop_pct` scores 100). The delivery index is the weighted mean over the metrics that were measured. The session index is the mean of the last 3. An alert fires on index > 40 or faults up by ≥ 2 vs baseline. With ≤ 6 deliveries it returns a note, not a trend. `delivery_fatigue_input()` extracts the per-delivery numbers (speeds in body heights per second, so camera distance doesn't matter).
+- **E. Workload**: acute = balls in the last 7 days; chronic = balls in the last 28 days as a weekly average; ACWR flagged > 1.5. It needs ≥ 21 days of history, otherwise it returns `None` with a note explaining why. `Repository.bowler_ball_history()` gives (day, balls) per finished session from stored deliveries.
+- Config: driver bounds, fatigue weights/full-drop points/windows, workload windows, all validated. Schemas: `InjuryFeatures`, `FatigueInput`, notes fields, and a per-delivery fatigue index (JSON Schema regenerated).
+
+**Tested**: 55 new tests (543 total; injury 98%, fatigue 98% coverage).
+- **Gate, monotonicity**: every driver is swept across twice its range in 40 random contexts (some drivers missing, as in single-view clips); its component(s) and the overall score never decrease. Mixed-action off→on never lowers lumbar (100 contexts).
+- **Gate, fatigue drift**: each metric's drift is measured exactly (half the full drop → that metric's weighted 50). A progressive multi-metric drift gives a strictly rising index and an alert. Rises don't count; missing metrics drop out of the weights; there's a fault-increase alert; too few deliveries are handled; input order doesn't matter. A synthetic tiring session (release height falling, knee collapse rising) gives a rising index and an alert.
+- Hand-computed full-model score; bounds/bands/top-driver tests; config validation; synthetic end-to-end (bad alignment raises lumbar by > 40; knee collapse + overstride raises knee by > 50; per-view feature availability). Workload hand-computed, steady vs spike, history requirement, future/old sessions; ball-history query (excludes failed sessions, other bowlers and the current session).
+
+**Choices to know about**
+- The spec's "arm slot extremeness" and "peak arm angular velocity **percentile**" have no population data to take a percentile from. They use configurable bounds instead (arm slot 20→60° from vertical; arm speed 1500→3000 °/s; trunk rotation 400→1000 °/s), documented in config as BowlSense defaults to tune in evaluation.
+- The synthetic generator has no run-up-speed or arm-speed fatigue parameters, so those two drift metrics are verified with hand-built inputs rather than synthetic video.
+
 ## Phase 5: Modules A (legality), B (alignment), C (faults) ✅ (2026-11-20)
 
 **Done**
@@ -120,4 +137,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 6: module D (rule-based injury risk, monotonicity tests) and module E (fatigue drift + workload ACWR).
+**Next**: Phase 7: real-video front end (video I/O, quality checks, YOLO person tracking, rtmlib pose + MediaPipe fallback, keypoint mapping, `cli analyze` with `--pose-from-json`). First phase that downloads model weights (via `scripts/download_models.py`).
