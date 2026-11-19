@@ -21,6 +21,21 @@ body:
   runup_end_before_peak_s: 0.6  # run-up window ends this long before peak bowling-wrist speed
 phases:
   use_model: false
+  release_refine_frames: 3          # refine release to the wrist-height peak within +-N frames
+  ffc_window_s: 0.4                 # search for front-foot contact this long before release
+  bfc_window_s: 0.35                # search for back-foot contact this long before ffc
+  contact_speed_h_per_s: 0.5        # ankle vertical speed below this (heights/s) = "still"
+  contact_min_frames: 3             # ...for at least this many frames
+  contact_ground_tol_pct: 3.0       # ...within this % of height of the ankle's lowest point
+  run_up_speed_frac: 0.2            # run-up starts when hip speed > 20% of peak
+  follow_through_speed_frac: 0.15   # follow-through ends when hip speed < 15% of peak
+  speed_hold_s: 0.1                 # ...and the crossing must hold this long (rejects noise)
+  hip_speed_smooth_s: 0.25          # extra smoothing for the (slow) hip-speed signal only
+  contact_velocity_window_s: 0.1    # Savitzky-Golay derivative window for ankle velocity
+  contact_fit_s: 0.05               # change-point fit uses this much data either side of the impact
+  contact_fit_order: 2              # 2 = quadratic: a foot speeds up as it comes down
+  low_confidence: 0.2               # confidence when events are out of order or a fallback was used
+  no_horizontal_motion_confidence: 0.5  # front/behind views: run-up events can't be seen
 legality:
   elbow_extension_threshold_deg: 15.0
 alignment:

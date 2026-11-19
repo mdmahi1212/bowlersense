@@ -80,6 +80,21 @@ class PhaseSettings(_Section):
     """Phase detection options."""
 
     use_model: bool
+    release_refine_frames: int = Field(ge=0)
+    ffc_window_s: float = Field(gt=0)
+    bfc_window_s: float = Field(gt=0)
+    contact_speed_h_per_s: float = Field(gt=0)
+    contact_min_frames: int = Field(ge=1)
+    contact_ground_tol_pct: float = Field(gt=0)
+    run_up_speed_frac: float = Field(gt=0, lt=1)
+    follow_through_speed_frac: float = Field(gt=0, lt=1)
+    speed_hold_s: float = Field(ge=0)
+    hip_speed_smooth_s: float = Field(gt=0)
+    contact_velocity_window_s: float = Field(gt=0)
+    contact_fit_s: float = Field(gt=0)
+    contact_fit_order: int = Field(ge=1, le=2)
+    low_confidence: float = Field(ge=0, le=1)
+    no_horizontal_motion_confidence: float = Field(ge=0, le=1)
 
 
 class LegalitySettings(_Section):
@@ -273,7 +288,10 @@ class ServerSettings(_Section):
     @property
     def web_origins(self) -> list[str]:
         """Origins the API accepts for CORS."""
-        return [f"http://localhost:{self.web_port}", f"http://127.0.0.1:{self.web_port}"]
+        return [
+            f"http://localhost:{self.web_port}",
+            f"http://127.0.0.1:{self.web_port}",
+        ]
 
 
 class Settings(_Section):

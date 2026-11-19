@@ -109,7 +109,10 @@ class SynthParams(BaseModel):
     runup_decel_pct: float = Field(default=5.0, ge=0, le=50)
     follow_through_pct: float = Field(default=80.0, ge=10, le=120)
     front_arm_ffc_deg: float = Field(
-        default=70.0, ge=-90, le=120, description="Front upper-arm elevation above horizontal"
+        default=70.0,
+        ge=-90,
+        le=120,
+        description="Front upper-arm elevation above horizontal",
     )
     noise_px: float = Field(default=0.0, ge=0)
     dropout_rate: float = Field(default=0.0, ge=0, lt=1)
@@ -285,6 +288,8 @@ class _Action:
             [
                 (0.0, 88.0),
                 (tl.takeoff, 88.0),
+                # alignment is settled just before BFC so "angle at BFC" is well defined
+                (tl.bfc - 0.04, sh_b),
                 (tl.bfc, sh_b),
                 (cr_min_t, sh_b - p.counter_rotation_deg),
                 (tl.release, 100.0),
@@ -296,6 +301,7 @@ class _Action:
             [
                 (0.0, 88.0),
                 (tl.takeoff, 88.0),
+                (tl.bfc - 0.04, hip_b),
                 (tl.bfc, hip_b),
                 (tl.ffc, hip_b + 15.0),
                 (tl.release, max(hip_b + 20.0, 85.0)),
@@ -381,6 +387,11 @@ class _Action:
         self.back_foot = (self.front_foot[0] - stride, -0.03)
         self._check_reach(tl.ffc)
 
+        # Low enough that the back foot stays planted for the first 50 ms after contact.
+        y_bfc = min(
+            [0.49]
+            + [self._pelvis_y_reaching_back(t) for t in np.linspace(tl.bfc, tl.bfc + 0.05, 6)]
+        )
         y_ffc = self._pelvis_y_planted(tl.ffc)
         y_rel = self._pelvis_y_planted(tl.release)
         self._pelvis_y_base = _pchip(
@@ -389,7 +400,7 @@ class _Action:
                 (T_STAND, 0.52),
                 (tl.takeoff, 0.50),
                 (tl.bound, 0.60),
-                (tl.bfc, 0.49),
+                (tl.bfc, y_bfc),
                 (tl.ffc, y_ffc),
                 (tl.release, y_rel),
                 (tl.release + 0.25, y_rel - 0.03),
@@ -455,6 +466,18 @@ class _Action:
     def _check_reach(self, t: float) -> None:
         self._pelvis_y_planted(t)
 
+    def _pelvis_y_reaching_back(self, t: float) -> float:
+        """Highest pelvis that still lets the back foot plant (knee slightly bent)."""
+        hip = self._hip_joint(t, "r", 0.0)
+        horiz = float(np.hypot(self.back_foot[0] - hip[0], self.back_foot[1] - hip[2]))
+        span = _knee_span(170.0)
+        if horiz >= span:
+            raise ValueError(
+                f"Back foot cannot reach the ground at back-foot contact (needs {horiz:.3f}H, "
+                f"leg spans {span:.3f}H). Reduce stride_pct or release_height_pct."
+            )
+        return ANKLE_H + float(np.sqrt(span**2 - horiz**2))
+
     def _solve_front_reach(self, ball_height: float) -> float:
         """Horizontal hip-to-front-ankle distance at release giving the target ball height."""
         tl = self.tl
@@ -513,10 +536,13 @@ class _Action:
                 return np.array([pl.pos[0], ANKLE_H, pl.pos[1]])
             nxt = seq[i + 1] if i + 1 < len(seq) else None
             if nxt is not None and pl.t_lift < t < nxt.t_land:
-                s = _smoothstep((t - pl.t_lift) / (nxt.t_land - pl.t_lift))
+                u = (t - pl.t_lift) / (nxt.t_land - pl.t_lift)
+                s = _smoothstep(u)
                 x = pl.pos[0] + s * (nxt.pos[0] - pl.pos[0])
                 z = pl.pos[1] + s * (nxt.pos[1] - pl.pos[1])
-                y = ANKLE_H + nxt.lift_h * float(np.sin(np.pi * s))
+                # Height follows linear time so the foot strikes the ground moving down
+                # (a real foot strike), instead of easing to a stop in mid-air.
+                y = ANKLE_H + nxt.lift_h * float(np.sin(np.pi * u))
                 return np.array([x, y, z])
         last = seq[-1]
         return np.array([last.pos[0], ANKLE_H, last.pos[1]])
@@ -581,7 +607,11 @@ class _Action:
         for side in ("l", "r"):
             hip = self._hip_joint(t, side, float(pelvis[1]))
             knee, ankle = _two_link_ik(hip, self.ankle_target(side, t), THIGH, SHANK, fwd)
-            pts[f"{side}_hip"], pts[f"{side}_knee"], pts[f"{side}_ankle"] = hip, knee, ankle
+            pts[f"{side}_hip"], pts[f"{side}_knee"], pts[f"{side}_ankle"] = (
+                hip,
+                knee,
+                ankle,
+            )
             pts[f"{side}_heel"] = ankle + np.array([-HEEL_BACK, -HEEL_DOWN, 0.0])
             pts[f"{side}_toe"] = ankle + np.array([TOE_FWD, -TOE_DOWN, 0.0])
         return pts
@@ -667,6 +697,14 @@ def _ground_truth(
 
     after = np.nonzero(speed[release + 1 :] < 0.15 * peak)[0]
     follow_end = release + 1 + int(after[0]) if after.size else n - 1
+
+    for label, f0, side in (("back", bfc, back), ("front", ffc, front)):
+        ys = world[f0 : min(f0 + 4, n), idx[f"{side}_ankle"], 1]
+        if np.abs(ys - ANKLE_H).max() > 1e-6:
+            raise ValueError(
+                f"The {label} foot does not stay on the ground after its contact; this "
+                "parameter combination is outside what the body model can reach."
+            )
 
     phases = PhaseEvents(
         run_up_start=run_up_start,

@@ -1,5 +1,36 @@
 # BowlSense — Progress
 
+## Phase 4: Heuristic phase detection ✅ (2026-11-20)
+
+**Done** (`ml/bowlsense/phases/heuristic.py`, all thresholds in `config/default.yaml → phases`)
+- **release**: peak bowling-wrist speed while the wrist is above the shoulder, refined to the wrist-height peak within ±3 frames.
+- **arm_horizontal**: the last frame before release where the upper arm crosses horizontal going up.
+- **ffc / bfc**: the ankle comes down and stays still near its lowest point for ≥3 frames, searching backward from release / ffc in the spec's windows. The impact itself is then pinned on the **unsmoothed** ankle track with a **change-point fit**: a least-squares fit of "descending (quadratic) curve, then flat ground", searched in 0.1-frame steps; contact = the first frame at or after impact.
+- **run_up_start / follow_through_end**: hip horizontal speed crosses 20% / 15% of its peak and **stays there for 0.1 s**. Hip speed uses its own 0.25 s Savitzky–Golay derivative (hip translation is slow; this doesn't blur any joint).
+- **bound**: the highest hip point between run-up start and bfc.
+- **Ordering** is validated: out of order, or a fallback used → confidence 0.2, a logged warning, and the best guess is still returned. Front/behind views (the run-up is along the camera axis, so hip speed carries no information): run-up start / follow-through end = clip edges, confidence 0.5.
+- `clean_sequence(..., smooth=False)` gives the gated + gap-filled but unsmoothed track that contact pinning needs. `savgol_derivative` is a shared low-noise derivative helper.
+- `scripts/phase_error_matrix.py`: an evaluation tool that prints worst frame errors per event over 8 action variants × 10 seeds × 4 noise conditions × 2 bowler sizes.
+
+**Results** (signed frame error vs ground truth, 120 fps, 80 runs per row):
+
+| bowler height | condition | worst error, all 7 events | runs > ±2 frames |
+|---|---|---|---|
+| 540 px | clean / 2 px noise / 10% dropout / both | ±1 / ±2 / ±1 / ±2 | **0 of 320** |
+| 300 px | clean / 10% dropout | ±1 | 0 |
+| 300 px | 2 px noise (± dropout) | ffc +3, all others ±2 | ffc in ~9% of runs |
+
+**Tested**: 66 new tests (356 total). **Section 10 gate**: ±2 frames at 120 fps with noise_px=2, both arms, 8 variants × 3 seeds; ±3 with 10% dropout; within ±1 on clean data; 240 fps is the same in time; front view (contacts/AH/release within ±2, confidence 0.5); fallback → low confidence + log; error cases; unit tests of the change-point fit (exact kink recovery, with NaN and noise), the sustained-crossing helper and release/arm-horizontal on an analytic arm swing.
+
+**Known limit (documented, tested as a stress case)**: at 300 px bowler height, 2 px of noise is 0.67% of height while the foot moves only ~4 px/frame before impact. In ~9% of runs, noise makes two planted frames look like the foot is still descending, and front-foot contact slips to +3. That's at the information limit of the data, not an estimator bug. The gate is tested at **540 px**, a bowler filling about half of a 1080p frame as the recording tips ask (full body, side-on, ~10 m), where it passes 320/320. My generator's 300 px default was an arbitrary choice, not a spec number.
+
+**Generator fixes found during this phase** (all Phase 2 tests still pass):
+- **Feet now strike the ground moving down.** Swing height was eased to zero speed just before touchdown, like a foot being placed gently in mid-air, which made contacts look early.
+- **Alignment is held steady for 40 ms into back-foot contact.** It was still turning at the contact instant, so "shoulder angle at BFC" depended on which frame landed on BFC.
+- **The back foot can now always plant.** In overstride / high-release variants the pelvis was too far ahead, and the IK silently lifted the "planted" foot, which made the ground truth wrong. The pelvis is now lowered at BFC as needed, and the generator **refuses** any sequence where a planted foot leaves the ground within 4 frames of its contact. This also made a 105% stride reachable.
+
+**Approaches tried and dropped** (so they aren't retried): single "still" onset (late by smoothing); a half-speed crossing (a fixed fraction fits one foot's speed curve but not the other's, so it was tuned to the generator); first frame near the ground (noise-limited); a linear line-fit (biased late because feet accelerate into impact).
+
 ## Phase 3: Geometry + smoothing + body ✅ (2026-11-19)
 
 **Done**
@@ -60,4 +91,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 4: heuristic phase detection (Section 10 phase tests: ±2 frames at 120 fps with 2 px noise; ±3 frames with 10% dropout; left and right arm).
+**Next**: Phase 5: modules A (legality), B (alignment), C (faults). Note the stride and release-height definitions under Phase 2.

@@ -81,10 +81,37 @@ def smooth_runs(values: FloatArray, valid: BoolArray, window: int, polyorder: in
     return out
 
 
-def clean_sequence(seq: PoseSequence, settings: PoseSettings) -> PoseSequence:
-    """Return a cleaned copy of ``seq`` (gated, gap-filled and smoothed).
+def savgol_derivative(
+    values: object, fps: float, window_s: float, polyorder: int = 2
+) -> FloatArray:
+    """First derivative (units/s) of a 1-D series with a Savitzky-Golay filter, per valid run.
 
-    Missing keypoints that couldn't be filled come back as ``None``. ``z`` is smoothed too
+    Much less noisy than finite differences of smoothed positions. ``NaN`` samples stay
+    ``NaN``; runs too short for the filter fall back to ``np.gradient``.
+    """
+    v = np.asarray(values, dtype=np.float64)
+    if v.ndim != 1:
+        raise InvalidInputError("savgol_derivative expects a 1-D series.")
+    window = savgol_window(fps, window_s, polyorder)
+    out = np.full(v.shape, np.nan)
+    for start, stop in valid_runs(np.isfinite(v)):
+        length = stop - start
+        w = min(window, length if length % 2 == 1 else length - 1)
+        if w > polyorder:
+            out[start:stop] = savgol_filter(v[start:stop], w, polyorder, deriv=1) * fps
+        elif length >= 2:
+            out[start:stop] = np.gradient(v[start:stop]) * fps
+    return out
+
+
+def clean_sequence(
+    seq: PoseSequence, settings: PoseSettings, *, smooth: bool = True
+) -> PoseSequence:
+    """Return a cleaned copy of ``seq``: gated, gap-filled and (unless ``smooth=False``)
+    Savitzky-Golay smoothed.
+
+    The unsmoothed variant keeps sharp events (foot strikes) in place for phase detection.
+    Missing keypoints that couldn't be filled come back as ``None``. ``z`` is processed too
     when the input has it.
     """
     n = len(seq.frames)
@@ -112,7 +139,9 @@ def clean_sequence(seq: PoseSequence, settings: PoseSettings) -> PoseSequence:
             if d == 2 and not np.isfinite(col[valid]).all():
                 continue  # no (or partial) depth: leave z missing
             filled = fill_short_gaps(col, valid, settings.max_gap_frames)
-            out_xyz[:, j, d] = smooth_runs(col, filled, window, settings.savgol_polyorder)
+            out_xyz[:, j, d] = (
+                smooth_runs(col, filled, window, settings.savgol_polyorder) if smooth else col
+            )
         if not valid.any():
             continue
         filled = fill_short_gaps(np.zeros(n), valid, settings.max_gap_frames)
