@@ -166,6 +166,8 @@ coach:
   max_words: 250
   timeout_s: 120
   retries: 1
+  top_issues: 3              # the report prioritises this many issues
+  chat_history_turns: 6      # chat keeps this many previous exchanges as context
 storage:
   root: data/storage       # relative paths resolve against the repo root
   db_path: data/bowlsense.db

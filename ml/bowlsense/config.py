@@ -428,6 +428,8 @@ class CoachSettings(_Section):
     max_words: int = Field(gt=0)
     timeout_s: float = Field(gt=0)
     retries: int = Field(ge=0)
+    top_issues: int = Field(ge=1)
+    chat_history_turns: int = Field(ge=0)
 
     @model_validator(mode="after")
     def _local_only(self) -> CoachSettings:

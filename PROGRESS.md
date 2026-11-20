@@ -1,5 +1,18 @@
 # BowlSense — Progress
 
+## Phase 11: Coach (drills, local Ollama + template fallback, chat) ✅ (2026-11-20)
+
+- `coach/drills.py`: 2–3 drills (name, description, reps) for each of the 10 fault codes.
+- `coach/prompts.py`: `summarise_session` builds the only thing the coach sees, a JSON summary of the metrics (never video or images). It ranks issues by weighted severity and keeps the top 3, and also covers legality, injury band and drivers, ball speeds, fatigue alerts, consistency and the closest reference. Also holds the system prompt (friendly, concrete, cites numbers, no medical diagnosis, ≤ 250 words, top 3 issues) and the chat context.
+- `coach/llm.py`:
+  - `OllamaClient` talks only to the configured localhost URL. It checks `GET /api/tags` for the model, then calls `POST /api/chat` with `stream: false`, a 120 s timeout and 1 retry.
+  - `generate_report` uses Ollama and trims replies to the word limit. It falls back to the template report on any failure (Ollama stopped, model not pulled, timeouts, bad payloads) and records why in `note`.
+  - `template_report` stands on its own: intro, top issues with their numbers and drills, elbow screening, injury screening, speed, fatigue, consistency and disclaimers.
+  - `coach_reply` handles chat with the session metrics plus the last N exchanges as context. Without Ollama, it gives an offline answer matched to the question.
+- CLI: `--no-llm` added. `result.json` gains `coach_summary` and `coach_report`, and the PDF includes the coach's notes.
+- Tests: `test_coach.py` (19 tests) mocks Ollama with respx (running, stopped, model missing, retry then fail, retry then recover, word trimming, chat history). The existing CLI tests pass `--no-llm`. `respx==0.23.1` is pinned in requirements-dev.
+- Known: Ollama itself isn't installed on this machine yet, so the real-LLM path is verified against mocks only.
+
 ## Phase 10: Module G (comparison, consistency, bowler ID) ✅ (2026-11-20)
 
 **Done**
@@ -239,4 +252,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 11: coach (drills, local Ollama report + template fallback, chat).
+**Next**: Phase 12: full pipeline + FastAPI + worker.

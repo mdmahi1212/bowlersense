@@ -18,6 +18,7 @@ pypdf==7.1.1
 pytest-cov==7.1.0
 pytest==9.2.0
 pytokens==0.4.1
+respx==0.23.1
 ruff==0.17.5
 scipy-stubs==1.17.1.5
 types-pyyaml==6.0.12.20261113
