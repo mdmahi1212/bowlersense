@@ -97,6 +97,8 @@ class PoseSettings(_Section):
     savgol_window_s: float = Field(gt=0)
     savgol_polyorder: int = Field(ge=1, le=5)
     lift_3d: bool
+    lift_model: str = Field(min_length=1)
+    lift_window: int = Field(ge=9)
 
 
 class BodySettings(_Section):
@@ -444,6 +446,21 @@ def _resolve(path: Path) -> Path:
     return path if path.is_absolute() else REPO_ROOT / path
 
 
+class ImageSettings(_Section):
+    """Image mode: single-photo posture checks."""
+
+    front_knee_min_deg: float = Field(gt=90, le=180)
+    arm_slot_high_deg: float = Field(ge=0, le=90)
+    arm_slot_round_deg: float = Field(ge=0, le=180)
+    front_hip_width_ratio: float = Field(gt=0, lt=1)
+
+    @model_validator(mode="after")
+    def _slots_ordered(self) -> ImageSettings:
+        if self.arm_slot_high_deg >= self.arm_slot_round_deg:
+            raise ValueError("image.arm_slot_high_deg must be below arm_slot_round_deg")
+        return self
+
+
 class StorageSettings(_Section):
     """Local data locations. Relative paths resolve against the repo root."""
 
@@ -514,6 +531,7 @@ class Settings(_Section):
     render: RenderSettings
     clipping: ClippingSettings
     coach: CoachSettings
+    image: ImageSettings
     storage: StorageSettings
     server: ServerSettings
 

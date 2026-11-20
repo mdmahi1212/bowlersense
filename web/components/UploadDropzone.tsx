@@ -3,8 +3,12 @@
 import { useRef, useState, type DragEvent } from "react";
 import { cn } from "@/lib/utils";
 
-const ACCEPT = ".mp4,.mov,.avi,video/mp4,video/quicktime,video/x-msvideo";
-const EXTENSIONS = [".mp4", ".mov", ".avi"];
+const ACCEPT =
+  ".mp4,.mov,.avi,.jpg,.jpeg,.png,video/mp4,video/quicktime,video/x-msvideo,image/jpeg,image/png";
+const EXTENSIONS = [".mp4", ".mov", ".avi", ".jpg", ".jpeg", ".png"];
+
+/** True for the photo types that go to image mode. */
+export const isImage = (f: File): boolean => /\.(jpe?g|png)$/i.test(f.name);
 
 /** Drag-and-drop (or click) video picker; rejects other file types before uploading. */
 export function UploadDropzone({
@@ -22,7 +26,10 @@ export function UploadDropzone({
   function pick(f: File | undefined) {
     if (!f) return;
     const ok = EXTENSIONS.some((e) => f.name.toLowerCase().endsWith(e));
-    onFile(ok ? f : null, ok ? undefined : `${f.name} isn't a video. Use MP4, MOV or AVI.`);
+    onFile(
+      ok ? f : null,
+      ok ? undefined : `${f.name} isn't supported. Use MP4, MOV, AVI, JPG or PNG.`,
+    );
   }
 
   function drop(e: DragEvent) {
@@ -35,7 +42,7 @@ export function UploadDropzone({
     <div
       role="button"
       tabIndex={0}
-      aria-label="Choose a bowling video to upload"
+      aria-label="Choose a bowling video or photo to upload"
       aria-disabled={disabled}
       onClick={() => !disabled && input.current?.click()}
       onKeyDown={(e) => {
@@ -73,8 +80,10 @@ export function UploadDropzone({
         </>
       ) : (
         <>
-          <p className="font-semibold">Drop a bowling video here</p>
-          <p className="text-sm text-muted">or click to choose · MP4, MOV or AVI up to 500 MB</p>
+          <p className="font-semibold">Drop a bowling video (or a photo) here</p>
+          <p className="text-sm text-muted">
+            or click to choose · MP4, MOV or AVI up to 500 MB · JPG or PNG for a posture check
+          </p>
         </>
       )}
     </div>

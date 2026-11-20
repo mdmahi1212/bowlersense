@@ -1,5 +1,30 @@
 # BowlSense — Progress
 
+## Phase 15: Image mode + learned phase model flag + optional 3D lift ✅ (2026-11-20)
+
+- **Image mode** (`image_mode.py`, `POST /analyze/image`, and the upload page when a JPG/PNG is dropped):
+  - YOLO picks the largest person, then the pose backend runs on that box.
+  - The user picks the phase the photo shows (BFC / FFC / release / auto) and the view (side / front / auto).
+    - Auto phase: wrist above head means release; feet a stride apart means FFC; otherwise BFC.
+    - Auto view: hip width ratio. Auto arm: the higher wrist.
+  - Checks: front-knee brace (≥ 160° at FFC/release; the back knee at BFC is for reference only), trunk lean (side view) or side-bend and head-over-front-foot (front view, flagged at release), and arm slot at release (high / three-quarter / round-arm).
+  - Thresholds live in the `image:` config section. The response says what a single image can't measure.
+  - Only the annotated copy is kept (`outputs/images/<id>/`); the original photo is deleted.
+  - Errors are clear: 415 for other file types, 422 for "no person" or too few joints, and 503 when a model file is missing (also for other endpoints).
+- **Learned phase model flag**: `phases.use_model` was already honoured (pipeline test in `test_learned.py`). It is now also on the Settings page ("Use the learned release model"; `LocalSettings.use_phase_model`, default from config = off, as specified). With it on, the bowling arm also comes from the elbow at the learned release.
+- **Optional 3D lift** (`pose/lift3d.py`, behind `pose.lift_3d: false`):
+  - MotionBERT-Lite exported to ONNX (`scripts/export_motionbert.py` builds it from a local MotionBERT checkout and checkpoint; not downloaded by default).
+  - Input is Human3.6M-ordered joints (COCO→H36M mapping), scaled x/y + confidence, over 243-frame windows with edge padding.
+  - Output fills `Keypoint.z` in pixels relative to the hip centre. Missing joints stay `None`, and x/y are unchanged.
+  - Hooked into `extract_pose` only when the flag is on. A missing model raises `ModelNotFoundError` with instructions.
+  - `onnx` was added to the dev requirements (for export and tests).
+- **Tests**:
+  - `test_image_mode.py` (9): arm and phase guesses for L/R, knee brace firm vs collapsed, side vs front checks, BFC checks, missing joints, end to end with a fake backend, bad files, no person.
+  - `test_lift3d.py` (4): H36M mapping and windows; flag off by default plus a clear missing-model error; lifting with a stand-in ONNX network that has MotionBERT's I/O shapes (z values checked exactly); the pipeline lifts only with the flag on.
+  - `test_api.py`: image endpoint (success, 415, 422 cleanup).
+  - Vitest: upload routing.
+- Gate: with the flags off everything passes (default config); with them on, their own tests pass.
+
 ## Phase 14: Next.js web app ✅ (2026-11-20)
 
 - **Stack**: Next.js 16.4.6 (App Router, TypeScript, Turbopack), React 19.3, Tailwind CSS 4, Recharts 3, all pinned exactly.
@@ -319,4 +344,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 15: image mode, learned phase model flag tests, optional 3D lift.
+**Next**: Phase 16: run.py launcher, setup, offline gate, README, evaluate.py.

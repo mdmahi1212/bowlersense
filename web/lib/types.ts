@@ -24,6 +24,8 @@ export interface BowlSense {
   Fault?: Fault;
   FaultReport?: FaultReport;
   FramePose?: FramePose;
+  ImageAnalysis?: ImageAnalysis;
+  ImageCheck?: ImageCheck;
   InjuryFeatures?: InjuryFeatures;
   InjuryRisk?: InjuryRisk;
   JobRecord?: JobRecord;
@@ -473,6 +475,45 @@ export interface Keypoint {
   conf: number;
 }
 /**
+ * Result of analysing one image.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ImageAnalysis".
+ */
+export interface ImageAnalysis {
+  phase: "bfc" | "ffc" | "release";
+  phase_source: "user" | "auto";
+  view: "side" | "front";
+  view_source: "user" | "auto";
+  bowling_arm: "right" | "left";
+  arm_source: "user" | "auto";
+  width: number;
+  height: number;
+  height_px: number | null;
+  keypoints: {
+    [k: string]: Keypoint | null;
+  };
+  checks: ImageCheck[];
+  warnings: string[];
+  annotated: string | null;
+  note: string;
+}
+/**
+ * One posture check. ``value`` is ``None`` when the needed joints weren't visible.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ImageCheck".
+ */
+export interface ImageCheck {
+  code: string;
+  name: string;
+  value: number | null;
+  unit: string;
+  threshold: number | null;
+  flagged: boolean | null;
+  note: string;
+}
+/**
  * Inputs to the injury-risk model. ``None`` = not measurable from this clip/view.
  *
  * This interface was referenced by `BowlSense`'s JSON-Schema
@@ -517,6 +558,7 @@ export interface LocalSettings {
   pose_backend: "rtm" | "mediapipe";
   use_gpu: boolean;
   use_llm: boolean;
+  use_phase_model: boolean;
 }
 /**
  * A bowler's pose over time.

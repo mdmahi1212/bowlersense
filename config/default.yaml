@@ -25,7 +25,9 @@ pose:
   max_gap_frames: 5
   savgol_window_s: 0.1  # Savitzky-Golay window ~ fps/10 frames, rounded up to odd
   savgol_polyorder: 2
-  lift_3d: false
+  lift_3d: false        # optional MotionBERT 3D lift (scripts/export_motionbert.py makes the model)
+  lift_model: motionbert_lite.onnx   # in models/
+  lift_window: 243      # frames per MotionBERT window
 body:
   height_factor: 1.15     # height = vertical ankle-to-nose x this (spec said 1.07; see PROGRESS.md)
   height_top_frac: 0.2    # use the median of the top 20% of run-up frames
@@ -168,6 +170,11 @@ coach:
   retries: 1
   top_issues: 3              # the report prioritises this many issues
   chat_history_turns: 6      # chat keeps this many previous exchanges as context
+image:                    # image mode (one photo, spec 7J)
+  front_knee_min_deg: 160   # front knee at least this straight from FFC to release
+  arm_slot_high_deg: 20     # arm within this of vertical at release = high slot
+  arm_slot_round_deg: 45    # this far or more from vertical = round-arm
+  front_hip_width_ratio: 0.12  # hip width / body size above this = front view (auto view)
 storage:
   root: data/storage       # relative paths resolve against the repo root
   db_path: data/bowlsense.db

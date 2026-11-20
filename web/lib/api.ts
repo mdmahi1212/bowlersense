@@ -9,6 +9,7 @@ import type {
   ChatTurn,
   CoachOut,
   DeliveryOut,
+  ImageAnalysis,
   Drill,
   LocalSettings,
   ReferencesOut,
@@ -186,6 +187,30 @@ export function uploadSession(
   xhr.open("POST", `${apiBase()}/sessions`);
   xhr.send(form);
   return { promise, abort: () => xhr.abort() };
+}
+
+export interface ImageFields {
+  file: File;
+  phase: "auto" | "bfc" | "ffc" | "release";
+  view: "auto" | "side" | "front";
+  bowlingArm?: "right" | "left";
+}
+
+/** Image mode: analyse one photo (synchronous on the server). */
+export async function analyzeImage(fields: ImageFields): Promise<ImageAnalysis> {
+  const form = new FormData();
+  form.append("file", fields.file);
+  form.append("phase", fields.phase);
+  form.append("view", fields.view);
+  if (fields.bowlingArm) form.append("bowling_arm", fields.bowlingArm);
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/analyze/image`, { method: "POST", body: form });
+  } catch {
+    throw new ApiError(0, `Can't reach the BowlSense API at ${apiBase()}.`);
+  }
+  if (!res.ok) throw await errorFrom(res);
+  return (await res.json()) as ImageAnalysis;
 }
 
 /** Human-readable error text for any thrown value. */

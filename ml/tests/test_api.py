@@ -300,3 +300,49 @@ def test_raw_video_drills_and_references(done: Env) -> None:
     refs = done.client.get("/references").json()
     assert len(refs["references"]) >= 2 and ["l_shoulder", "r_shoulder"] in refs["edges"]
     assert all(r["name"].startswith("Reference: ") for r in refs["references"])
+
+
+class _PhotoBackend:
+    name = "fake"
+
+    def estimate(self, frame: object, bbox: object) -> dict[str, object]:
+        r = generate(SynthParams(height_px=400.0))
+        return dict(r.sequence.frames[r.phases.release].keypoints)
+
+
+def test_analyze_image(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    import cv2
+    import numpy as np
+
+    import bowlsense.image_mode as im
+
+    monkeypatch.setattr(im, "detect_person", lambda img, s: (10.0, 10.0, 600.0, 700.0))
+    monkeypatch.setattr(im, "load_backend", lambda *a, **k: _PhotoBackend())
+    ok, png = cv2.imencode(".png", np.full((720, 1280, 3), 30, np.uint8))
+    assert ok
+    r = env.client.post(
+        "/analyze/image",
+        files={"file": ("photo.png", png.tobytes(), "image/png")},
+        data={"phase": "release"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["phase"] == "release" and body["phase_source"] == "user"
+    assert {c["code"] for c in body["checks"]} >= {"FRONT_KNEE", "ARM_SLOT"}
+    assert body["annotated"].startswith("outputs/images/")
+    assert env.client.get(f"/files/{body['annotated']}").status_code == 200
+    assert not any((env.storage.root / "raw").iterdir())  # the original photo isn't kept
+    bad = env.client.post("/analyze/image", files={"file": ("x.mp4", b"0", "video/mp4")})
+    assert bad.status_code == 415
+    monkeypatch.setattr(im, "detect_person", _no_person)
+    nobody = env.client.post(
+        "/analyze/image", files={"file": ("p.png", png.tobytes(), "image/png")}
+    )
+    assert nobody.status_code == 422 and "No person" in nobody.json()["detail"]
+    assert len(list((env.storage.root / "outputs" / "images").iterdir())) == 1  # the first one
+
+
+def _no_person(img: object, s: object) -> object:
+    from bowlsense.errors import NoBowlerDetectedError
+
+    raise NoBowlerDetectedError("No person found in the image. Use a photo of the bowler.")

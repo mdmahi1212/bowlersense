@@ -71,6 +71,12 @@
     "FramePose": {
       "$ref": "#/$defs/FramePose"
     },
+    "ImageAnalysis": {
+      "$ref": "#/$defs/ImageAnalysis"
+    },
+    "ImageCheck": {
+      "$ref": "#/$defs/ImageCheck"
+    },
     "InjuryFeatures": {
       "$ref": "#/$defs/InjuryFeatures"
     },
@@ -1514,6 +1520,211 @@
       "title": "FramePose",
       "type": "object"
     },
+    "ImageAnalysis": {
+      "description": "Result of analysing one image.",
+      "properties": {
+        "phase": {
+          "enum": [
+            "bfc",
+            "ffc",
+            "release"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "phase_source": {
+          "enum": [
+            "user",
+            "auto"
+          ],
+          "title": "Phase Source",
+          "type": "string"
+        },
+        "view": {
+          "enum": [
+            "side",
+            "front"
+          ],
+          "title": "View",
+          "type": "string"
+        },
+        "view_source": {
+          "enum": [
+            "user",
+            "auto"
+          ],
+          "title": "View Source",
+          "type": "string"
+        },
+        "bowling_arm": {
+          "enum": [
+            "right",
+            "left"
+          ],
+          "title": "Bowling Arm",
+          "type": "string"
+        },
+        "arm_source": {
+          "enum": [
+            "user",
+            "auto"
+          ],
+          "title": "Arm Source",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "height_px": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Height Px"
+        },
+        "keypoints": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Keypoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Keypoints",
+          "type": "object"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/ImageCheck"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "annotated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Annotated"
+        },
+        "note": {
+          "default": "Single-image screening: posture at one moment only. Elbow legality, speeds and timing need a video.",
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "phase_source",
+        "view",
+        "view_source",
+        "bowling_arm",
+        "arm_source",
+        "width",
+        "height",
+        "height_px",
+        "keypoints",
+        "checks",
+        "warnings",
+        "annotated",
+        "note"
+      ],
+      "title": "ImageAnalysis",
+      "type": "object"
+    },
+    "ImageCheck": {
+      "description": "One posture check. ``value`` is ``None`` when the needed joints weren't visible.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "flagged": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Flagged"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "value",
+        "unit",
+        "threshold",
+        "flagged",
+        "note"
+      ],
+      "title": "ImageCheck",
+      "type": "object"
+    },
     "InjuryFeatures": {
       "additionalProperties": false,
       "description": "Inputs to the injury-risk model. ``None`` = not measurable from this clip/view.",
@@ -1902,13 +2113,19 @@
           "default": true,
           "title": "Use Llm",
           "type": "boolean"
+        },
+        "use_phase_model": {
+          "default": false,
+          "title": "Use Phase Model",
+          "type": "boolean"
         }
       },
       "required": [
         "coach_model",
         "pose_backend",
         "use_gpu",
-        "use_llm"
+        "use_llm",
+        "use_phase_model"
       ],
       "title": "LocalSettings",
       "type": "object"

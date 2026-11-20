@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -33,12 +34,12 @@ from bowlsense.device import gpu_status
 from bowlsense.errors import (
     BowlSenseError,
     CalibrationError,
-    DatabaseError,
-    InvalidInputError,
+    ModelNotFoundError,
     NotFoundError,
     UnsupportedMediaError,
 )
 from bowlsense.geometry.pitch import calibrate
+from bowlsense.image_mode import ImageAnalysis, ImageCheck, analyze_image
 from bowlsense.local_settings import (
     LocalSettings,
     effective_settings,
@@ -51,6 +52,7 @@ from bowlsense.worker import pose_upload_path
 
 log = logging.getLogger(__name__)
 VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi")
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 
 # --- request / response bodies ------------------------------------------------------------------
@@ -229,9 +231,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def _traversal(_: Request, exc: PathTraversalError) -> JSONResponse:
         return _error(400, exc)
 
+    @app.exception_handler(ModelNotFoundError)
+    async def _no_model(_: Request, exc: ModelNotFoundError) -> JSONResponse:
+        return _error(503, exc)
+
     @app.exception_handler(BowlSenseError)
     async def _bowlsense(_: Request, exc: BowlSenseError) -> JSONResponse:
-        return _error(422 if isinstance(exc, InvalidInputError | DatabaseError) else 500, exc)
+        return _error(422, exc)  # bad input, no bowler found, poor pose quality, ...
 
     # --- health / settings ----------------------------------------------------------------
 
@@ -350,7 +356,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Store the upload as ``raw/<uuid>.<ext>`` (streamed in chunks) and queue analysis."""
         name = file.filename or ""
         suffix = Path(name).suffix.lower()
-        if suffix in settings.api.allowed_extensions and suffix not in VIDEO_EXTENSIONS:
+        if suffix in IMAGE_EXTENSIONS:
             raise HTTPException(415, "Images are analysed with POST /analyze/image.")
         if bowler_id:
             state.repo.get_bowler(bowler_id)
@@ -495,6 +501,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             delivery_count=len(result.deliveries), delivery=result.deliveries[ref.idx],
         )  # fmt: skip
 
+    @app.post("/analyze/image")
+    def analyze_image_endpoint(
+        file: Annotated[UploadFile, File(description="photo: jpg or png")],
+        phase: Annotated[Literal["auto", "bfc", "ffc", "release"], Form()] = "auto",
+        view: Annotated[Literal["auto", "side", "front"], Form()] = "auto",
+        bowling_arm: Annotated[Literal["right", "left"] | None, Form()] = None,
+    ) -> ImageAnalysis:
+        """Image mode (synchronous): pose on one photo and the single-frame posture checks."""
+        max_bytes = settings.api.max_upload_mb * 1024 * 1024
+        rel = state.storage.save_upload(file.file, file.filename or "", IMAGE_EXTENSIONS, max_bytes)
+        photo = state.storage.resolve(rel)
+        image_id = photo.stem
+        out = state.storage.resolve(f"{OUTPUTS_DIR}/images/{image_id}", within=OUTPUTS_DIR)
+        try:
+            effective = effective_settings(settings, load_local_settings(settings))
+            result = analyze_image(
+                photo, effective, phase=phase, view=view, bowling_arm=bowling_arm,
+                annotated_out=out / "annotated.png",
+            )  # fmt: skip
+        except BaseException:
+            shutil.rmtree(out, ignore_errors=True)
+            raise
+        finally:
+            photo.unlink(missing_ok=True)  # only the annotated copy is kept
+        return result.model_copy(
+            update={"annotated": f"{OUTPUTS_DIR}/images/{image_id}/annotated.png"}
+        )
+
     @app.get("/sessions/{session_id}/video")
     def session_video(session_id: str) -> FileResponse:
         """The uploaded video (HTTP Range supported), for the overlay toggle."""
@@ -546,6 +580,6 @@ if __name__ == "__main__":
 API_MODELS: tuple[type[BaseModel], ...] = (
     BowlerIn, BowlerRecord, SessionRecord, JobRecord, SessionOut, CalibrationIn, CoachIn,
     CoachOut, ChatTurn, ConfirmIn, SettingsOut, LocalSettings, WorkloadPoint, WorkloadOut,
-    ReferencesOut, ReferenceAction, Drill, DeliveryOut,
+    ReferencesOut, ReferenceAction, Drill, DeliveryOut, ImageAnalysis, ImageCheck,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

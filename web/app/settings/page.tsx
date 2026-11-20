@@ -135,6 +135,14 @@ function SettingsForm({
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
+            checked={s.use_phase_model}
+            onChange={(e) => setS({ ...s, use_phase_model: e.target.checked })}
+          />
+          Use the learned release model (trained on real footage; better on match video)
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
             checked={s.use_llm}
             onChange={(e) => setS({ ...s, use_llm: e.target.checked })}
           />

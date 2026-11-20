@@ -1,7 +1,8 @@
 """User-editable local settings (the web app's settings page), stored next to the database.
 
-They override a few config defaults: the Ollama model, the pose backend, GPU use and whether
-the LLM coach is used at all. The file is plain JSON at ``<db folder>/settings.json``.
+They override a few config defaults: the Ollama model, the pose backend, GPU use, whether
+the LLM coach is used at all, and whether the learned phase model is used. The file is plain
+JSON at ``<db folder>/settings.json``.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ class LocalSettings(BaseModel):
     pose_backend: Literal["rtm", "mediapipe"]
     use_gpu: bool = True
     use_llm: bool = True
+    use_phase_model: bool = False  # learned release model (phases.use_model), if trained
 
 
 def settings_file(settings: Settings) -> Path:
@@ -37,7 +39,11 @@ def settings_file(settings: Settings) -> Path:
 
 def defaults(settings: Settings) -> LocalSettings:
     """Local settings taken from the config file."""
-    return LocalSettings(coach_model=settings.coach.model, pose_backend=settings.pose.backend)
+    return LocalSettings(
+        coach_model=settings.coach.model,
+        pose_backend=settings.pose.backend,
+        use_phase_model=settings.phases.use_model,
+    )
 
 
 def load_local_settings(settings: Settings) -> LocalSettings:
@@ -68,5 +74,6 @@ def effective_settings(settings: Settings, local: LocalSettings) -> Settings:
         update={
             "coach": settings.coach.model_copy(update={"model": local.coach_model}),
             "pose": settings.pose.model_copy(update={"backend": local.pose_backend}),
+            "phases": settings.phases.model_copy(update={"use_model": local.use_phase_model}),
         }
     )

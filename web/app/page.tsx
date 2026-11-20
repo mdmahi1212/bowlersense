@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BowlerPicker } from "@/components/BowlerPicker";
-import { UploadDropzone } from "@/components/UploadDropzone";
+import { ImageAnalysisPanel } from "@/components/ImageAnalysisPanel";
+import { UploadDropzone, isImage } from "@/components/UploadDropzone";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { ErrorBox } from "@/components/ui/States";
@@ -43,6 +44,7 @@ export default function UploadPage() {
   }
 
   const uploading = progress !== null;
+  const photo = file !== null && isImage(file);
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
       <section className="space-y-4">
@@ -55,7 +57,8 @@ export default function UploadPage() {
             setError(err ?? null);
           }}
         />
-        <Card>
+        {photo && file && <ImageAnalysisPanel key={file.name + file.size} file={file} />}
+        <Card className={photo ? "hidden" : undefined}>
           <CardTitle>Bowler</CardTitle>
           <BowlerPicker value={bowlerId} onChange={setBowlerId} />
           <label className="mt-3 flex items-center gap-2 text-sm">
@@ -102,9 +105,11 @@ export default function UploadPage() {
             </div>
           </div>
         )}
-        <Button onClick={submit} disabled={!file || uploading} className="w-full sm:w-auto">
-          {uploading ? "Uploading…" : "Upload and analyse"}
-        </Button>
+        {!photo && (
+          <Button onClick={submit} disabled={!file || uploading} className="w-full sm:w-auto">
+            {uploading ? "Uploading…" : "Upload and analyse"}
+          </Button>
+        )}
       </section>
       <aside>
         <Card>

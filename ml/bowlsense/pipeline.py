@@ -131,7 +131,7 @@ def extract_pose(
 
     With ``pose_json`` the keypoints come from that file (a saved ``PoseSequence``) instead
     of the detector and pose model; the video is still checked. ``bowling_arm`` (from the
-    bowler's profile) skips arm detection.
+    bowler's profile) skips arm detection. With ``pose.lift_3d`` on, MotionBERT fills ``z``.
     """
     info = probe_video(video)
     warnings = check_video(info, settings.video, allow_low_fps)
@@ -168,9 +168,17 @@ def extract_pose(
     warnings += check_pose(seq, _visible_frames(seq), settings.video)
     log.info("front end: %s arm (%s), %s view, %d warning(s)", arm, arm_result.method, view,
              len(warnings))  # fmt: skip
+    seq = seq.model_copy(update={"bowling_arm": arm, "view": view})
+    if settings.pose.lift_3d:  # optional, feature-flagged; every module works in 2D without it
+        from bowlsense.pose.lift3d import lift_sequence, load_lifter
+
+        lifter = load_lifter(
+            settings.storage.models_path / settings.pose.lift_model, settings.pose.lift_window
+        )
+        seq = lift_sequence(seq, lifter)
     return FrontEndResult(
         video=info,
-        sequence=seq.model_copy(update={"bowling_arm": arm, "view": view}),
+        sequence=seq,
         warnings=warnings,
         bowler_track_id=track_id,
         backend=used_backend,
