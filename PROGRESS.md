@@ -1,5 +1,18 @@
 # BowlSense — Progress
 
+## Analysis studio, biomechanics, release accuracy, model evaluation ✅ (2026-11-20)
+
+- **Release detection:** the learned model finds the neighbourhood and the frame-precise rules are used when they agree within 0.15 s. On the real held-out test videos this gets **86.9 %** within ±1 frame (learned alone 76.2 %, rules 61.9 %) with an MAE of 1.08 frames. Synthetic: about 1 frame.
+- **Set release manually:** `POST /deliveries/{id}/release` re-analyses one delivery from the saved skeleton in seconds (legality, angles, mechanics, keyframes) and keeps its id.
+- **Biomechanics** (`analysis/biomech.py`): 33 measurements per delivery at BFC, FFC and release, plus speeds, timing and the kinetic chain, each with the camera view it needs. Angle and angular-velocity curves for 5 joints.
+- **Analysis studio** (delivery page):
+  - frame-accurate player with the skeleton drawn live on a canvas, speeds 0.1–1×, ±1/±10 frame steps, keyboard shortcuts, a phase timeline and **Set release here**;
+  - live joint angles, the release spotlight (still frame and angles), skeleton filmstrip per phase, mechanics tables, kinetic chain, synced joint curves, faults and body-load map.
+  - New broadcast-studio theme.
+- **Model evaluation:** `bowlsense/evaluation.py` (confusion matrix, accuracy, balanced accuracy, precision/recall/F1 per class and macro/weighted, baseline, coverage; MAE/RMSE/R²/bias), checked against hand-computed examples.
+  - `train/eval_suite.py` covers pace vs spin, bowling arm (×2), camera view and release/bowler-pick scores on **real** held-out data, and legality, 10 faults and 13 biomechanical measurements on **synthetic** ground truth.
+  - Output goes to the `/evaluation` page and to `data/eval/` (metrics.json, evaluation.md, PNG figures). `scripts/evaluate.py` runs it.
+
 ## Real clips: slow motion, identity swaps, legality verdict, pick the bowler ✅ (2026-11-20)
 
 - **Legality verdict:** every delivery says **LEGAL**, **NOT LEGAL** or **CAN'T JUDGE** (with the reason). It appears on the session card, delivery table, delivery page, PDF and coach report.

@@ -38,6 +38,7 @@ from bowlsense.errors import (
     NotFoundError,
     UnsupportedMediaError,
 )
+from bowlsense.evaluation import EvaluationReport
 from bowlsense.geometry.pitch import calibrate
 from bowlsense.image_mode import ImageAnalysis, ImageCheck, analyze_image
 from bowlsense.local_settings import (
@@ -46,6 +47,7 @@ from bowlsense.local_settings import (
     load_local_settings,
     save_local_settings,
 )
+from bowlsense.pipeline import reanalyse_delivery
 from bowlsense.schemas import (
     SKELETON_EDGES,
     DeliveryMetrics,
@@ -88,6 +90,12 @@ class CalibrationIn(BaseModel):
 
     points: list[list[float]] = Field(min_length=4, max_length=4)
     rerun: bool = True
+
+
+class ReleaseIn(BaseModel):
+    """The release frame (within the delivery's clip) chosen by the user."""
+
+    frame: int = Field(ge=1)
 
 
 class BowlerChoiceIn(BaseModel):
@@ -578,6 +586,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             update={"annotated": f"{OUTPUTS_DIR}/images/{image_id}/annotated.png"}
         )
 
+    @app.post("/deliveries/{delivery_id}/release")
+    def set_release(delivery_id: str, body: ReleaseIn) -> DeliveryOut:
+        """Re-analyse one delivery with the release at the frame the user picked."""
+        ref = state.repo.get_delivery(delivery_id)
+        session = state.repo.get_session(ref.session_id)
+        result = state.result(ref.session_id)
+        out_dir = state.output_dir(ref.session_id)
+        if result is None or not (out_dir / "pose.json").is_file():
+            raise HTTPException(409, "This session has no saved skeleton to re-analyse.")
+        raw = SessionResult.model_validate_json(
+            (out_dir / "result.json").read_text(encoding="utf-8")
+        )
+        effective = effective_settings(settings, load_local_settings(settings))
+        updated = reanalyse_delivery(
+            state.storage.resolve(session.video_path), out_dir, raw, ref.idx, body.frame,
+            effective,
+        )  # fmt: skip
+        state.repo.update_delivery(delivery_id, updated.deliveries[ref.idx])
+        return get_delivery(delivery_id)
+
     @app.get("/sessions/{session_id}/video")
     def session_video(session_id: str) -> FileResponse:
         """The uploaded video (HTTP Range supported), for the overlay toggle."""
@@ -586,6 +614,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not video.is_file():
             raise HTTPException(404, "The uploaded video is missing.")
         return FileResponse(video)
+
+    @app.get("/evaluation")
+    def evaluation() -> EvaluationReport:
+        """The latest model-evaluation report (``python scripts/evaluate.py`` makes it)."""
+        path = settings.storage.db_file.parent / "eval" / "metrics.json"
+        if not path.is_file():
+            raise HTTPException(404, "No evaluation yet. Run: python scripts/evaluate.py")
+        return EvaluationReport.model_validate_json(path.read_text(encoding="utf-8"))
 
     @app.get("/drills")
     def drills() -> dict[str, list[Drill]]:
@@ -631,5 +667,7 @@ API_MODELS: tuple[type[BaseModel], ...] = (
     CoachOut, ChatTurn, ConfirmIn, SettingsOut, LocalSettings, WorkloadPoint, WorkloadOut,
     ReferencesOut, ReferenceAction, Drill, DeliveryOut, ImageAnalysis, ImageCheck,
     BowlerChoiceIn,
+    ReleaseIn,
+    EvaluationReport,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

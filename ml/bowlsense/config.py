@@ -126,6 +126,7 @@ class PhaseSettings(_Section):
     """Phase detection options."""
 
     use_model: bool
+    model_agreement_s: float = Field(ge=0)
     model_file: str = Field(min_length=1)
     release_refine_frames: int = Field(ge=0)
     ffc_window_s: float = Field(gt=0)

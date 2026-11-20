@@ -14,6 +14,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from bowlsense.analysis.alignment import assess_alignment
+from bowlsense.analysis.biomech import biomech_curves, biomechanics
 from bowlsense.analysis.compare import compare_to_references, consistency, load_references
 from bowlsense.analysis.delivery import assess_ball
 from bowlsense.analysis.fatigue import assess_fatigue, assess_workload, delivery_fatigue_input
@@ -274,15 +275,23 @@ def analyze_delivery(
     delivery_idx: int = 0,
     popping_crease: Sequence[Point] | None = None,
     fatigue_index: float | None = None,
+    release: int | None = None,
 ) -> DeliveryAnalysis:
-    """Run phases and modules A-D on one delivery's raw pose sequence."""
+    """Run phases and modules A-D on one delivery's raw pose sequence. ``release`` (a frame
+    of this clip, e.g. set by the user) overrides the detected release."""
     seq = clean_sequence(raw, settings.pose)
     unsmoothed = clean_sequence(raw, settings.pose, smooth=False)
     height = estimate_height_px(seq, settings.body).height_px
     models = settings.storage.models_path
-    learned_release: int | None = None
-    if settings.phases.use_model:
-        learned_release = load_phase_model(models / settings.phases.model_file).predict(seq).release
+    learned_release: int | None = release
+    if learned_release is None and settings.phases.use_model:
+        # The learned model finds the release robustly on low-fps match footage; the rules
+        # are frame-precise on clean high-fps clips. Use the rules when they agree with the
+        # model to within ``phases.model_agreement_s``, else trust the model.
+        guess = load_phase_model(models / settings.phases.model_file).predict(seq).release
+        by_rules = detect_phases(seq, height, settings.phases, raw=unsmoothed)
+        tolerance = round(settings.phases.model_agreement_s * seq.fps)
+        learned_release = None if abs(by_rules.release - guess) <= tolerance else guess
     phases = detect_phases(seq, height, settings.phases, raw=unsmoothed, release=learned_release)
     type_file = models / settings.delivery.type_model_file
     delivery_type = classify_delivery_type(seq, phases.release, type_file)
@@ -301,7 +310,9 @@ def analyze_delivery(
         injury=assess_injury(features, settings.injury),
         fatigue_input=delivery_fatigue_input(delivery_idx, seq, phases, height, faults, settings),
         delivery_type=delivery_type,
-        release_source="model" if learned_release is not None else "rules",
+        release_source=(
+            "user" if release is not None else "model" if learned_release is not None else "rules"
+        ),
     )
 
 
@@ -440,6 +451,7 @@ def delivery_metrics(
     clip: PoseSequence,
     window: ClipWindow,
     keyframes: dict[str, str],
+    settings: Settings | None = None,
 ) -> DeliveryMetrics:
     """Flatten one ``DeliveryAnalysis`` into the ``DeliveryMetrics`` contract."""
     m = analysis.faults.measurements
@@ -471,6 +483,14 @@ def delivery_metrics(
         ball_track=analysis.ball_track,
         comparisons=analysis.comparisons,
         keyframes=keyframes,
+        biomechanics=(
+            biomechanics(clip, analysis.phases, analysis.height_px, analysis.alignment, settings)
+            if settings is not None
+            else []
+        ),
+        biomech_curves=(
+            biomech_curves(clip, settings.pose.savgol_window_s) if settings is not None else []
+        ),
     )
 
 
@@ -544,7 +564,7 @@ def run_pipeline(
         report_deliveries.append(
             ReportDelivery(index=i, analysis=delivery, sequence=clip, keyframes=keyframes)
         )
-        metrics.append(delivery_metrics(i, delivery, clip, session.windows[i], rel))
+        metrics.append(delivery_metrics(i, delivery, clip, session.windows[i], rel, settings))
     report(88, "writing coach report")
     seq = front.sequence
     summary = summarise_session(
@@ -601,3 +621,60 @@ def run_pipeline(
     (out_dir / "result.json").write_text(result.model_dump_json(indent=1), encoding="utf-8")
     report(100, "done")
     return result
+
+
+def reanalyse_delivery(
+    video: Path,
+    out_dir: Path,
+    result: SessionResult,
+    index: int,
+    release: int,
+    settings: Settings,
+) -> SessionResult:
+    """Re-run one delivery with the release at clip frame ``release`` (set by the user),
+    reusing the saved pose (``out_dir/pose.json``); keyframes are redrawn, ball metrics kept.
+    Returns the updated result (also written to ``out_dir/result.json``)."""
+    from bowlsense.render.keyframes import export_keyframes
+    from bowlsense.render.overlay import OverlayPainter, OverlaySegment
+
+    pose = PoseSequence.model_validate_json((out_dir / "pose.json").read_text(encoding="utf-8"))
+    old = result.deliveries[index]
+    stop = old.clip_stop or len(pose.frames)
+    if not 0 < release < stop - old.clip_start:
+        raise InvalidInputError(f"Release frame {release} is outside this delivery's clip.")
+    window = ClipWindow(start=old.clip_start, stop=stop, release=old.clip_start + release)
+    analysis = analyze_delivery(
+        sub_sequence(pose, window), settings, delivery_idx=index, release=release
+    )
+    cleaned = clean_sequence(pose, settings.pose)
+    clip = sub_sequence(cleaned, window)
+    refs = load_references(settings.compare.reference_path)
+    analysis = analysis.model_copy(
+        update={
+            "ball": None,
+            "comparisons": (
+                compare_to_references(clip, analysis.phases, refs, settings.compare) if refs else []
+            ),
+        }
+    )
+    segments = []
+    for i, d in enumerate(result.deliveries):
+        phases = analysis.phases if i == index else d.phases
+        legality = analysis.legality if i == index else d.legality
+        segments.append(OverlaySegment(start=d.clip_start, stop=d.clip_stop or len(pose.frames),
+                                       phases=phases, legality=legality))  # fmt: skip
+    painter = OverlayPainter(cleaned, segments, settings.render)
+    folder = out_dir / "keyframes" / f"delivery_{index + 1:02d}"
+    keyframes = export_keyframes(video, painter, segments[index], folder, settings.render)
+    rel = {ev: p.relative_to(out_dir).as_posix() for ev, p in keyframes.items()}
+    new = delivery_metrics(index, analysis, clip, window, rel, settings).model_copy(
+        update={
+            "speed_kmh": old.speed_kmh, "length": old.length, "line": old.line,
+            "pitch_xy": old.pitch_xy, "ball_notes": old.ball_notes, "ball_track": old.ball_track,
+        }
+    )  # fmt: skip
+    deliveries = list(result.deliveries)
+    deliveries[index] = new
+    updated = result.model_copy(update={"deliveries": deliveries})
+    (out_dir / "result.json").write_text(updated.model_dump_json(indent=1), encoding="utf-8")
+    return updated

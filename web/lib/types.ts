@@ -5,6 +5,7 @@ export interface BowlSense {
   AngleSeries?: AngleSeries;
   BallMetrics?: BallMetrics;
   BallTrack?: BallTrack;
+  BiomechMetric?: BiomechMetric;
   BowlerChoiceIn?: BowlerChoiceIn;
   BowlerIn?: BowlerIn;
   BowlerRecord?: BowlerRecord;
@@ -19,6 +20,7 @@ export interface BowlSense {
   DeliveryOut?: DeliveryOut;
   DeliveryTypeResult?: DeliveryTypeResult;
   Drill?: Drill;
+  EvaluationReport?: EvaluationReport;
   FatigueDrift?: FatigueDrift;
   FatigueInput?: FatigueInput;
   FatigueResult?: FatigueResult;
@@ -39,6 +41,7 @@ export interface BowlSense {
   ReferenceAction?: ReferenceAction;
   ReferenceComparison?: ReferenceComparison;
   ReferencesOut?: ReferencesOut;
+  ReleaseIn?: ReleaseIn;
   RiskComponent?: RiskComponent;
   SessionOut?: SessionOut;
   SessionRecord?: SessionRecord;
@@ -105,6 +108,22 @@ export interface BallTrack {
   points: [number, number, number, number][];
   release_frame: number | null;
   bounce_frame: number | null;
+}
+/**
+ * One biomechanical measurement of a delivery (``value`` ``None``: see
+ * ``not_measured``).
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "BiomechMetric".
+ */
+export interface BiomechMetric {
+  key: string;
+  name: string;
+  group: string;
+  value: number | null;
+  unit: string;
+  description: string;
+  not_measured: string | null;
 }
 /**
  * The tracked person to analyse as the bowler.
@@ -224,7 +243,7 @@ export interface DeliveryAnalysis {
   injury: InjuryRisk;
   fatigue_input: FatigueInput;
   delivery_type: DeliveryTypeResult | null;
-  release_source: "rules" | "model";
+  release_source: "rules" | "model" | "user";
   ball: BallMetrics | null;
   ball_track: BallTrack | null;
   comparisons: ReferenceComparison[];
@@ -403,13 +422,15 @@ export interface DeliveryMetrics {
     [k: string]: string;
   };
   delivery_type: DeliveryTypeResult | null;
-  release_source: "rules" | "model";
+  release_source: "rules" | "model" | "user";
   ball_notes: string[];
   ball_track: BallTrack | null;
   comparisons: ReferenceComparison[];
   keyframes: {
     [k: string]: string;
   };
+  biomechanics: BiomechMetric[];
+  biomech_curves: AngleSeries[];
 }
 /**
  * One delivery with what the detail page needs from its session.
@@ -441,6 +462,91 @@ export interface Drill {
   name: string;
   description: string;
   reps: string;
+}
+/**
+ * The full evaluation shown on the "Model evaluation" page.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "EvaluationReport".
+ */
+export interface EvaluationReport {
+  generated: string;
+  classification: ClassificationReport[];
+  regression: RegressionReport[];
+  scores: ScoreItem[];
+  notes: string[];
+}
+/**
+ * Everything about one classifier on one labelled test set.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ClassificationReport".
+ */
+export interface ClassificationReport {
+  task: string;
+  description: string;
+  data: "real" | "synthetic";
+  labels: string[];
+  confusion: number[][];
+  n: number;
+  accuracy: number;
+  balanced_accuracy: number;
+  macro_precision: number;
+  macro_recall: number;
+  macro_f1: number;
+  weighted_f1: number;
+  per_class: ClassMetrics[];
+  abstained: number;
+  coverage: number;
+  baseline_accuracy: number | null;
+  notes: string[];
+}
+/**
+ * Precision, recall and F1 of one class.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ClassMetrics".
+ */
+export interface ClassMetrics {
+  label: string;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  support: number;
+}
+/**
+ * How close a measurement is to the ground truth.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "RegressionReport".
+ */
+export interface RegressionReport {
+  task: string;
+  description: string;
+  data: "real" | "synthetic";
+  unit: string;
+  n: number;
+  mae: number;
+  rmse: number;
+  r2: number | null;
+  bias: number;
+  max_abs_error: number;
+  truth: number[];
+  measured: number[];
+}
+/**
+ * A single headline score (e.g. a task that isn't a fixed-label classification).
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ScoreItem".
+ */
+export interface ScoreItem {
+  task: string;
+  metric: string;
+  value: number;
+  n: number;
+  data: "real" | "synthetic";
+  note: string;
 }
 /**
  * Percent change of one delivery's metrics versus the session baseline.
@@ -646,6 +752,15 @@ export interface ReferenceAction {
 export interface ReferencesOut {
   references: ReferenceAction[];
   edges: string[][];
+}
+/**
+ * The release frame (within the delivery's clip) chosen by the user.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ReleaseIn".
+ */
+export interface ReleaseIn {
+  frame: number;
 }
 /**
  * A session with its latest job and (when done) its result.

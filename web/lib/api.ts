@@ -9,6 +9,7 @@ import type {
   ChatTurn,
   CoachOut,
   DeliveryOut,
+  EvaluationReport,
   ImageAnalysis,
   Drill,
   LocalSettings,
@@ -139,6 +140,12 @@ export const api = {
       ...json({ track_id: trackId }),
     }),
   delivery: (id: string) => request<DeliveryOut>(`/deliveries/${encodeURIComponent(id)}`),
+  setRelease: (id: string, frame: number) =>
+    request<DeliveryOut>(`/deliveries/${encodeURIComponent(id)}/release`, {
+      method: "POST",
+      ...json({ frame }),
+    }),
+  evaluation: () => request<EvaluationReport>("/evaluation"),
   drills: () => request<Record<string, Drill[]>>("/drills"),
   references: () => request<ReferencesOut>("/references"),
 

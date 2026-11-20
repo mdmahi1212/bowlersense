@@ -14,6 +14,9 @@
     "BallTrack": {
       "$ref": "#/$defs/BallTrack"
     },
+    "BiomechMetric": {
+      "$ref": "#/$defs/BiomechMetric"
+    },
     "ConsistencyResult": {
       "$ref": "#/$defs/ConsistencyResult"
     },
@@ -361,6 +364,65 @@
       "title": "BallTrack",
       "type": "object"
     },
+    "BiomechMetric": {
+      "additionalProperties": false,
+      "description": "One biomechanical measurement of a delivery (``value`` ``None``: see\n``not_measured``).",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "group": {
+          "title": "Group",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "not_measured": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Measured"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "group",
+        "value",
+        "unit",
+        "description"
+      ],
+      "title": "BiomechMetric",
+      "type": "object"
+    },
     "ConsistencyResult": {
       "additionalProperties": false,
       "description": "Consistency across a session's deliveries (module G).",
@@ -440,7 +502,8 @@
           "default": "rules",
           "enum": [
             "rules",
-            "model"
+            "model",
+            "user"
           ],
           "title": "Release Source",
           "type": "string"
@@ -669,7 +732,8 @@
           "default": "rules",
           "enum": [
             "rules",
-            "model"
+            "model",
+            "user"
           ],
           "title": "Release Source",
           "type": "string"
@@ -705,6 +769,20 @@
           },
           "title": "Keyframes",
           "type": "object"
+        },
+        "biomechanics": {
+          "items": {
+            "$ref": "#/$defs/BiomechMetric"
+          },
+          "title": "Biomechanics",
+          "type": "array"
+        },
+        "biomech_curves": {
+          "items": {
+            "$ref": "#/$defs/AngleSeries"
+          },
+          "title": "Biomech Curves",
+          "type": "array"
         }
       },
       "required": [

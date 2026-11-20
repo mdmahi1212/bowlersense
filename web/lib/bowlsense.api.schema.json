@@ -14,6 +14,9 @@
     "BallTrack": {
       "$ref": "#/$defs/BallTrack"
     },
+    "BiomechMetric": {
+      "$ref": "#/$defs/BiomechMetric"
+    },
     "BowlerChoiceIn": {
       "$ref": "#/$defs/BowlerChoiceIn"
     },
@@ -55,6 +58,9 @@
     },
     "Drill": {
       "$ref": "#/$defs/Drill"
+    },
+    "EvaluationReport": {
+      "$ref": "#/$defs/EvaluationReport"
     },
     "FatigueDrift": {
       "$ref": "#/$defs/FatigueDrift"
@@ -115,6 +121,9 @@
     },
     "ReferencesOut": {
       "$ref": "#/$defs/ReferencesOut"
+    },
+    "ReleaseIn": {
+      "$ref": "#/$defs/ReleaseIn"
     },
     "RiskComponent": {
       "$ref": "#/$defs/RiskComponent"
@@ -428,6 +437,66 @@
       "title": "BallTrack",
       "type": "object"
     },
+    "BiomechMetric": {
+      "additionalProperties": false,
+      "description": "One biomechanical measurement of a delivery (``value`` ``None``: see\n``not_measured``).",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "group": {
+          "title": "Group",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "not_measured": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Measured"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "group",
+        "value",
+        "unit",
+        "description",
+        "not_measured"
+      ],
+      "title": "BiomechMetric",
+      "type": "object"
+    },
     "BowlerChoiceIn": {
       "description": "The tracked person to analyse as the bowler.",
       "properties": {
@@ -647,6 +716,184 @@
       "title": "ChatTurn",
       "type": "object"
     },
+    "ClassMetrics": {
+      "description": "Precision, recall and F1 of one class.",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Precision"
+        },
+        "recall": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recall"
+        },
+        "f1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "F1"
+        },
+        "support": {
+          "title": "Support",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "precision",
+        "recall",
+        "f1",
+        "support"
+      ],
+      "title": "ClassMetrics",
+      "type": "object"
+    },
+    "ClassificationReport": {
+      "description": "Everything about one classifier on one labelled test set.",
+      "properties": {
+        "task": {
+          "title": "Task",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "data": {
+          "enum": [
+            "real",
+            "synthetic"
+          ],
+          "title": "Data",
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "array"
+        },
+        "confusion": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Confusion",
+          "type": "array"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        },
+        "accuracy": {
+          "title": "Accuracy",
+          "type": "number"
+        },
+        "balanced_accuracy": {
+          "title": "Balanced Accuracy",
+          "type": "number"
+        },
+        "macro_precision": {
+          "title": "Macro Precision",
+          "type": "number"
+        },
+        "macro_recall": {
+          "title": "Macro Recall",
+          "type": "number"
+        },
+        "macro_f1": {
+          "title": "Macro F1",
+          "type": "number"
+        },
+        "weighted_f1": {
+          "title": "Weighted F1",
+          "type": "number"
+        },
+        "per_class": {
+          "items": {
+            "$ref": "#/$defs/ClassMetrics"
+          },
+          "title": "Per Class",
+          "type": "array"
+        },
+        "abstained": {
+          "default": 0,
+          "title": "Abstained",
+          "type": "integer"
+        },
+        "coverage": {
+          "default": 1.0,
+          "title": "Coverage",
+          "type": "number"
+        },
+        "baseline_accuracy": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline Accuracy"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "task",
+        "description",
+        "data",
+        "labels",
+        "confusion",
+        "n",
+        "accuracy",
+        "balanced_accuracy",
+        "macro_precision",
+        "macro_recall",
+        "macro_f1",
+        "weighted_f1",
+        "per_class",
+        "abstained",
+        "coverage",
+        "baseline_accuracy",
+        "notes"
+      ],
+      "title": "ClassificationReport",
+      "type": "object"
+    },
     "CoachIn": {
       "description": "A chat message to the coach.",
       "properties": {
@@ -786,7 +1033,8 @@
           "default": "rules",
           "enum": [
             "rules",
-            "model"
+            "model",
+            "user"
           ],
           "title": "Release Source",
           "type": "string"
@@ -1020,7 +1268,8 @@
           "default": "rules",
           "enum": [
             "rules",
-            "model"
+            "model",
+            "user"
           ],
           "title": "Release Source",
           "type": "string"
@@ -1056,6 +1305,20 @@
           },
           "title": "Keyframes",
           "type": "object"
+        },
+        "biomechanics": {
+          "items": {
+            "$ref": "#/$defs/BiomechMetric"
+          },
+          "title": "Biomechanics",
+          "type": "array"
+        },
+        "biomech_curves": {
+          "items": {
+            "$ref": "#/$defs/AngleSeries"
+          },
+          "title": "Biomech Curves",
+          "type": "array"
         }
       },
       "required": [
@@ -1083,7 +1346,9 @@
         "ball_notes",
         "ball_track",
         "comparisons",
-        "keyframes"
+        "keyframes",
+        "biomechanics",
+        "biomech_curves"
       ],
       "title": "DeliveryMetrics",
       "type": "object"
@@ -1208,6 +1473,53 @@
         "reps"
       ],
       "title": "Drill",
+      "type": "object"
+    },
+    "EvaluationReport": {
+      "description": "The full evaluation shown on the \"Model evaluation\" page.",
+      "properties": {
+        "generated": {
+          "format": "date-time",
+          "title": "Generated",
+          "type": "string"
+        },
+        "classification": {
+          "items": {
+            "$ref": "#/$defs/ClassificationReport"
+          },
+          "title": "Classification",
+          "type": "array"
+        },
+        "regression": {
+          "items": {
+            "$ref": "#/$defs/RegressionReport"
+          },
+          "title": "Regression",
+          "type": "array"
+        },
+        "scores": {
+          "items": {
+            "$ref": "#/$defs/ScoreItem"
+          },
+          "title": "Scores",
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "generated",
+        "classification",
+        "regression",
+        "scores",
+        "notes"
+      ],
+      "title": "EvaluationReport",
       "type": "object"
     },
     "FatigueDrift": {
@@ -2460,6 +2772,107 @@
       "title": "ReferencesOut",
       "type": "object"
     },
+    "RegressionReport": {
+      "description": "How close a measurement is to the ground truth.",
+      "properties": {
+        "task": {
+          "title": "Task",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "data": {
+          "enum": [
+            "real",
+            "synthetic"
+          ],
+          "title": "Data",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        },
+        "mae": {
+          "title": "Mae",
+          "type": "number"
+        },
+        "rmse": {
+          "title": "Rmse",
+          "type": "number"
+        },
+        "r2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "R2"
+        },
+        "bias": {
+          "title": "Bias",
+          "type": "number"
+        },
+        "max_abs_error": {
+          "title": "Max Abs Error",
+          "type": "number"
+        },
+        "truth": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Truth",
+          "type": "array"
+        },
+        "measured": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Measured",
+          "type": "array"
+        }
+      },
+      "required": [
+        "task",
+        "description",
+        "data",
+        "unit",
+        "n",
+        "mae",
+        "rmse",
+        "r2",
+        "bias",
+        "max_abs_error",
+        "truth",
+        "measured"
+      ],
+      "title": "RegressionReport",
+      "type": "object"
+    },
+    "ReleaseIn": {
+      "description": "The release frame (within the delivery's clip) chosen by the user.",
+      "properties": {
+        "frame": {
+          "minimum": 1,
+          "title": "Frame",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame"
+      ],
+      "title": "ReleaseIn",
+      "type": "object"
+    },
     "RiskComponent": {
       "additionalProperties": false,
       "description": "One component of the injury-risk model.",
@@ -2495,6 +2908,50 @@
         "drivers"
       ],
       "title": "RiskComponent",
+      "type": "object"
+    },
+    "ScoreItem": {
+      "description": "A single headline score (e.g. a task that isn't a fixed-label classification).",
+      "properties": {
+        "task": {
+          "title": "Task",
+          "type": "string"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "n": {
+          "title": "N",
+          "type": "integer"
+        },
+        "data": {
+          "enum": [
+            "real",
+            "synthetic"
+          ],
+          "title": "Data",
+          "type": "string"
+        },
+        "note": {
+          "default": "",
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task",
+        "metric",
+        "value",
+        "n",
+        "data",
+        "note"
+      ],
+      "title": "ScoreItem",
       "type": "object"
     },
     "SessionOut": {

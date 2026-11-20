@@ -365,6 +365,10 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps({"rows": rows, "raw": raw}, indent=1, default=float), encoding="utf-8"
     )
     print(f"\nwrote {OUT_DIR / 'report.md'} and report.json", file=sys.stderr)
+    print("running the evaluation suite (confusion matrices, F1, MAE/R^2)...", file=sys.stderr)
+    from train.eval_suite import markdown, run
+
+    print(markdown(run(quick=args.quick, out=OUT_DIR)))
     return 0
 
 

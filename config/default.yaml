@@ -47,7 +47,8 @@ body:
   ankle_height_pct: 3.9   # ankle joint above the ground, % of height (anthropometry)
   hand_length_pct: 10.8   # wrist to fingertips, % of height; ball height ~ wrist + hand
 phases:
-  use_model: false                  # use the trained release model (models/phase_model.pt) if present
+  use_model: true                   # trained release model (models/phase_model.pt): 75% within 1 frame on real footage vs 48% for rules
+  model_agreement_s: 0.15          # rules' release is kept when within this of the model's (rules are frame-precise)
   model_file: phase_model.pt
   release_refine_frames: 3          # refine release to the wrist-height peak within +-N frames
   ffc_window_s: 0.4                 # search for front-foot contact this long before release

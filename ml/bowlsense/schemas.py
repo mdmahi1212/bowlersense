@@ -327,10 +327,23 @@ class DeliveryAnalysis(_Model):
     injury: InjuryRisk
     fatigue_input: FatigueInput
     delivery_type: DeliveryTypeResult | None = None
-    release_source: Literal["rules", "model"] = "rules"
+    release_source: Literal["rules", "model", "user"] = "rules"
     ball: BallMetrics | None = None
     ball_track: BallTrack | None = None
     comparisons: list[ReferenceComparison] = Field(default_factory=list)
+
+
+class BiomechMetric(_Model):
+    """One biomechanical measurement of a delivery (``value`` ``None``: see
+    ``not_measured``)."""
+
+    key: str
+    name: str
+    group: str  # Back-foot contact, Front-foot contact, Release, Speeds, Timing, ...
+    value: float | None
+    unit: str
+    description: str
+    not_measured: str | None = None
 
 
 class DeliveryMetrics(_Model):
@@ -361,11 +374,13 @@ class DeliveryMetrics(_Model):
     fault_measurements: dict[str, float] = Field(default_factory=dict)
     not_measured: dict[str, str] = Field(default_factory=dict)
     delivery_type: DeliveryTypeResult | None = None
-    release_source: Literal["rules", "model"] = "rules"
+    release_source: Literal["rules", "model", "user"] = "rules"
     ball_notes: list[str] = Field(default_factory=list)
     ball_track: BallTrack | None = None
     comparisons: list[ReferenceComparison] = Field(default_factory=list)
     keyframes: dict[str, str] = Field(default_factory=dict)  # event -> artifact path
+    biomechanics: list[BiomechMetric] = Field(default_factory=list)
+    biomech_curves: list[AngleSeries] = Field(default_factory=list)  # angles + *_velocity
 
 
 class FatigueInput(_Model):
@@ -485,6 +500,7 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     DeliveryTypeResult,
     DeliveryAnalysis,
     DeliveryMetrics,
+    BiomechMetric,
     FatigueInput,
     FatigueDrift,
     FatigueResult,

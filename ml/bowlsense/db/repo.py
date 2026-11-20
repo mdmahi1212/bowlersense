@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session as OrmSession
 from bowlsense.db import models as m
 from bowlsense.db.session import immediate, make_sessionmaker
 from bowlsense.errors import DatabaseError, NotFoundError
-from bowlsense.schemas import SessionResult
+from bowlsense.schemas import DeliveryMetrics, SessionResult
 from bowlsense.storage import LocalStorage
 
 Status = Literal["queued", "processing", "done", "failed"]
@@ -304,6 +304,32 @@ class Repository:
                 )
             )  # fmt: skip
             return refs
+
+    def update_delivery(self, delivery_id: str, d: DeliveryMetrics) -> DeliveryRef:
+        """Replace one stored delivery's results in place (its id stays the same)."""
+        with self._tx(write=True) as s:
+            row = self._get(s, m.Delivery, "delivery", delivery_id)
+            pitch = d.pitch_xy or (None, None)
+            row.phases = d.phases.model_dump(mode="json")
+            row.action_type, row.speed_kmh, row.length, row.line = (
+                d.action_type, d.speed_kmh, d.length, d.line,
+            )  # fmt: skip
+            row.pitch_x, row.pitch_y = pitch[0], pitch[1]
+            row.technique_score = d.technique_score
+            row.injury_overall, row.injury_band = d.injury.overall, d.injury.band
+            row.legality_flagged = d.legality.flagged
+            row.elbow_extension_deg = d.legality.elbow_extension_deg
+            s.execute(delete(m.DeliveryMetric).where(m.DeliveryMetric.delivery_id == delivery_id))
+            s.execute(delete(m.FaultRow).where(m.FaultRow.delivery_id == delivery_id))
+            for a in d.angles:
+                s.add(m.DeliveryMetric(delivery_id=delivery_id, name=a.name,
+                                       values=a.model_dump(mode="json")))  # fmt: skip
+            for f in d.faults:
+                row_f = m.FaultRow(delivery_id=delivery_id, code=f.code, severity=f.severity)
+                row_f.value, row_f.threshold, row_f.frames = f.value, f.threshold, f.frames
+                s.add(row_f)
+            s.flush()
+            return DeliveryRef.model_validate(row)
 
     def list_deliveries(self, session_id: str) -> list[DeliveryRef]:
         """A session's stored deliveries in order."""

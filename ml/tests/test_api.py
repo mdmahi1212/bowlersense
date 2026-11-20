@@ -439,3 +439,18 @@ def load_local_settings_for(env: Env) -> LocalSettings:
     from bowlsense.local_settings import load_local_settings
 
     return load_local_settings(env.settings)
+
+
+def test_user_sets_release_frame(done: Env) -> None:
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    before = done.client.get(f"/deliveries/{did}").json()["delivery"]
+    frame = before["phases"]["release"] + 3
+    r = done.client.post(f"/deliveries/{did}/release", json={"frame": frame})
+    assert r.status_code == 200, r.text
+    after = r.json()["delivery"]
+    assert after["phases"]["release"] == frame and after["release_source"] == "user"
+    assert after["biomechanics"] and after["legality"]["verdict"] in ("legal", "not_legal")
+    again = done.client.get(f"/deliveries/{did}").json()["delivery"]  # stored, same id
+    assert again["phases"]["release"] == frame
+    bad = done.client.post(f"/deliveries/{did}/release", json={"frame": 99999})
+    assert bad.status_code == 422
