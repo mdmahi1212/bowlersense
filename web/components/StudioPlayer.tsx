@@ -33,6 +33,7 @@ export function StudioPlayer({
   width,
   height,
   hideTimeline = false,
+  overlay,
 }: {
   videoSrc: string;
   overlaySrc: string;
@@ -53,6 +54,8 @@ export function StudioPlayer({
   height: number;
   /** The page shows its own multi-track timeline instead. */
   hideTimeline?: boolean;
+  /** Drawn over the video in video-pixel space (e.g. the measuring tool). */
+  overlay?: React.ReactNode;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -311,6 +314,7 @@ export function StudioPlayer({
           className="pointer-events-none absolute inset-0 h-full w-full object-contain"
           style={{ objectFit: "contain" }}
         />
+        {overlay}
         <div className="pointer-events-none absolute left-3 top-3 flex gap-2">
           <span className="bg-black/70 px-2 py-1 font-display text-xs uppercase tracking-widest text-[#ff5b3a]">
             {phaseAt(frame, phases)}

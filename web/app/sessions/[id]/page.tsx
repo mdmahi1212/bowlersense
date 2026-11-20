@@ -15,6 +15,7 @@ import { api, type SessionEvent } from "@/lib/api";
 import type { SessionOut, SessionResult } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSessionStatus } from "@/lib/useSessionStatus";
+import { CountUp } from "@/components/motion/CountUp";
 import { PageHead } from "@/components/ui/PageHead";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { bandOf, bandStyle, cleanName, cn, fmt } from "@/lib/utils";
@@ -179,7 +180,10 @@ function Results({
   return (
     <>
       {/* verdict + headline numbers */}
-      <section className="grid gap-12 border-t border-foreground pt-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <section
+        data-reveal
+        className="rule-draw grid gap-12 pt-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]"
+      >
         <div>
           <p className="kicker">Legality screening</p>
           <div className="mt-4">
@@ -245,6 +249,8 @@ function Results({
             return (
               <li
                 key={d.delivery_idx}
+                data-reveal
+                style={{ "--d": `${Math.min(i, 8) * 70}ms` } as React.CSSProperties}
                 className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4 py-4 sm:grid-cols-[2.5rem_9rem_7rem_minmax(0,1fr)_auto]"
               >
                 <span className="font-display text-3xl leading-none">{d.delivery_idx + 1}</span>
@@ -369,9 +375,9 @@ function Results({
                   <span>{name}</span>
                   <span className="tabular text-muted">{sim.toFixed(0)}%</span>
                 </div>
-                <div className="mt-2 h-px bg-border">
+                <div className="mt-2 h-px bg-border" data-reveal>
                   <div
-                    className="h-0.5 -translate-y-px bg-foreground"
+                    className="grow h-0.5 -translate-y-px bg-foreground"
                     style={{ width: `${sim}%` }}
                   />
                 </div>
@@ -414,7 +420,7 @@ function Stat({
       <dt className="kicker">{label}</dt>
       <dd className="mt-2 flex items-baseline gap-1">
         <span className="font-display text-6xl leading-none" data-testid={testId}>
-          {value}
+          <CountUp value={value} />
         </span>
         <span className="text-sm text-muted">{unit}</span>
       </dd>

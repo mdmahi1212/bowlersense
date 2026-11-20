@@ -26,6 +26,11 @@ test("upload a synthetic delivery and see the results", async ({ page }) => {
   await expect(page.getByText("Elbow at release")).toBeVisible();
   await expect(page.getByRole("button", { name: "Set release here" })).toBeVisible();
   await expect(page.locator("video")).toHaveCount(2); // player + release loop
+  await expect(page.getByRole("link", { name: "Export slow-mo MP4" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Side by side" })).toBeVisible();
+  await page.getByRole("button", { name: "angle", exact: true }).click();
+  await page.getByRole("tab", { name: "Measurements" }).click();
+  await expect(page.getByText("No measurements yet.")).toBeVisible();
   await page.getByRole("tab", { name: "Faults" }).click();
   await expect(page.getByText("Front knee collapse").first()).toBeVisible();
   await page.screenshot({ path: "test-results/screens/delivery.png", fullPage: true });

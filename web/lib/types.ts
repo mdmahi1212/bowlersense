@@ -3,6 +3,8 @@
 export interface BowlSense {
   AlignmentResult?: AlignmentResult;
   AngleSeries?: AngleSeries;
+  Annotation?: Annotation;
+  AnnotationsIn?: AnnotationsIn;
   BallMetrics?: BallMetrics;
   BallTrack?: BallTrack;
   BiomechMetric?: BiomechMetric;
@@ -38,6 +40,9 @@ export interface BowlSense {
   PeopleTracks?: PeopleTracks;
   PhaseEvents?: PhaseEvents;
   PoseSequence?: PoseSequence;
+  ProgressDelivery?: ProgressDelivery;
+  ProgressOut?: ProgressOut;
+  ProgressPoint?: ProgressPoint;
   ReferenceAction?: ReferenceAction;
   ReferenceComparison?: ReferenceComparison;
   ReferencesOut?: ReferencesOut;
@@ -83,6 +88,36 @@ export interface AngleSeries {
   unit: "deg";
   values: (number | null)[];
   frames: number[];
+}
+/**
+ * A measurement drawn on a frame: a line (2 points) or an angle (3 points, vertex in the
+ * middle). Points are in video pixels; ``frame`` is clip-relative.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "Annotation".
+ */
+export interface Annotation {
+  kind: "line" | "angle";
+  frame: number;
+  /**
+   * @minItems 2
+   * @maxItems 3
+   */
+  points:
+    [[number, number], [number, number]] | [[number, number], [number, number], [number, number]];
+  label: string;
+}
+/**
+ * Body of ``PUT /deliveries/{id}/annotations`` (replaces them all).
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "AnnotationsIn".
+ */
+export interface AnnotationsIn {
+  /**
+   * @maxItems 200
+   */
+  annotations: Annotation[];
 }
 /**
  * Module F: speed, length, line and pitch position (``None`` = not measurable, see
@@ -267,13 +302,14 @@ export interface PhaseEvents {
 /**
  * Elbow-extension screening result.
  *
- * ``verdict`` is the plain answer shown to the user: ``legal`` (elbow straightened no more
- * than the threshold), ``not_legal`` (more than the threshold) or ``cannot_judge`` (the clip
- * can't support a measurement; see ``not_screened_reason``). ``verdict_text`` says it in words.
+ * ``verdict`` is the plain answer shown to the user and always follows the measured angle:
+ * ``legal`` (elbow straightened no more than the threshold) or ``not_legal`` (more).
+ * ``cannot_judge`` only appears in results saved by older versions and is upgraded on load.
+ * ``verdict_text`` says it in words.
  *
  * ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
- * camera view, phase events out of order, implausible value); then ``flagged`` is always
- * False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
+ * camera view, phase events out of order, implausible value); the verdict is then
+ * unverified and ``not_screened_reason`` says why.
  *
  * This interface was referenced by `BowlSense`'s JSON-Schema
  * via the `definition` "LegalityResult".
@@ -730,6 +766,51 @@ export interface PoseSequence {
   view: "side" | "front" | "behind" | "unknown";
   bowling_arm: "right" | "left";
   frames: FramePose[];
+}
+/**
+ * One delivery in a bowler's progress history.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ProgressDelivery".
+ */
+export interface ProgressDelivery {
+  delivery_id: string;
+  idx: number;
+  technique: number;
+  elbow_extension_deg: number;
+  verdict: string;
+}
+/**
+ * ``GET /bowlers/{id}/progress``: sessions oldest first, plus the best and worst balls.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ProgressOut".
+ */
+export interface ProgressOut {
+  bowler_id: string;
+  points: ProgressPoint[];
+  best: ProgressDelivery | null;
+  worst: ProgressDelivery | null;
+}
+/**
+ * One finished session of a bowler, summarised for the progress charts.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "ProgressPoint".
+ */
+export interface ProgressPoint {
+  session_id: string;
+  name: string;
+  day: string;
+  deliveries: number;
+  technique: number;
+  injury: number;
+  elbow_extension_max: number;
+  release_height_pct: number | null;
+  stride_pct: number | null;
+  arm_speed_deg_s: number | null;
+  not_legal: number;
+  items: ProgressDelivery[];
 }
 /**
  * A reference action shipped in ``data/reference/`` (never named after a real player).

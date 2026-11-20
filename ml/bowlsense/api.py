@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -28,7 +29,7 @@ from bowlsense.coach.drills import DRILLS, Drill
 from bowlsense.coach.llm import ChatTurn, OllamaClient, OllamaUnavailableError, coach_reply
 from bowlsense.coach.prompts import CoachSummary
 from bowlsense.config import Settings, load_settings
-from bowlsense.db.repo import BowlerRecord, JobRecord, Repository, SessionRecord
+from bowlsense.db.repo import BowlerRecord, DeliveryRef, JobRecord, Repository, SessionRecord
 from bowlsense.db.session import get_engine
 from bowlsense.device import gpu_status
 from bowlsense.errors import (
@@ -48,10 +49,12 @@ from bowlsense.local_settings import (
     save_local_settings,
 )
 from bowlsense.pipeline import reanalyse_delivery
+from bowlsense.render.clip import write_release_clip
 from bowlsense.schemas import (
     SKELETON_EDGES,
     DeliveryMetrics,
     PeopleTracks,
+    PoseSequence,
     SessionResult,
     WorkloadResult,
 )
@@ -139,6 +142,58 @@ class DeliveryOut(BaseModel):
     pose: str  # storage path of the session's pose.json
     delivery_count: int
     delivery: DeliveryMetrics
+
+
+class Annotation(BaseModel):
+    """A measurement drawn on a frame: a line (2 points) or an angle (3 points, vertex in the
+    middle). Points are in video pixels; ``frame`` is clip-relative."""
+
+    kind: Literal["line", "angle"]
+    frame: int = Field(ge=0)
+    points: list[tuple[float, float]] = Field(min_length=2, max_length=3)
+    label: str = Field(default="", max_length=60)
+
+
+class AnnotationsIn(BaseModel):
+    """Body of ``PUT /deliveries/{id}/annotations`` (replaces them all)."""
+
+    annotations: list[Annotation] = Field(max_length=200)
+
+
+class ProgressDelivery(BaseModel):
+    """One delivery in a bowler's progress history."""
+
+    delivery_id: str
+    idx: int
+    technique: float
+    elbow_extension_deg: float
+    verdict: str
+
+
+class ProgressPoint(BaseModel):
+    """One finished session of a bowler, summarised for the progress charts."""
+
+    session_id: str
+    name: str
+    day: datetime
+    deliveries: int
+    technique: float
+    injury: float
+    elbow_extension_max: float
+    release_height_pct: float | None
+    stride_pct: float | None
+    arm_speed_deg_s: float | None
+    not_legal: int
+    items: list[ProgressDelivery]
+
+
+class ProgressOut(BaseModel):
+    """``GET /bowlers/{id}/progress``: sessions oldest first, plus the best and worst balls."""
+
+    bowler_id: str
+    points: list[ProgressPoint]
+    best: ProgressDelivery | None
+    worst: ProgressDelivery | None
 
 
 class ReferencesOut(BaseModel):
@@ -349,6 +404,61 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             points=points,
             flag_above=settings.workload.acwr_flag,
             latest=latest,
+        )
+
+    @app.get("/bowlers/{bowler_id}/progress")
+    def bowler_progress(bowler_id: str) -> ProgressOut:
+        """Each finished session of a bowler (oldest first) with its key numbers, so trends
+        across sessions can be charted, plus the best and worst deliveries overall."""
+        state.repo.get_bowler(bowler_id)  # 404 for an unknown bowler
+        points: list[ProgressPoint] = []
+        for rec in state.repo.list_sessions(bowler_id):
+            result = state.result(rec.id) if rec.status == "done" else None
+            if result is None or not result.deliveries:
+                continue
+            ds = result.deliveries
+            ids = [d.id for d in state.repo.list_deliveries(rec.id)]
+
+            def mean(xs: list[float | None]) -> float | None:
+                vals = [x for x in xs if x is not None and np.isfinite(x)]
+                return float(np.mean(vals)) if vals else None
+
+            def metric(d: DeliveryMetrics, key: str) -> float | None:
+                return next((m.value for m in d.biomechanics if m.key == key), None)
+
+            points.append(
+                ProgressPoint(
+                    session_id=rec.id,
+                    name=rec.original_name or rec.id[:8],
+                    day=rec.recorded_at or rec.created_at,
+                    deliveries=len(ds),
+                    technique=float(np.mean([d.technique_score for d in ds])),
+                    injury=float(np.mean([d.injury.overall for d in ds])),
+                    elbow_extension_max=max(d.legality.elbow_extension_deg for d in ds),
+                    release_height_pct=mean([d.release_height_pct for d in ds]),
+                    stride_pct=mean([d.stride_pct for d in ds]),
+                    arm_speed_deg_s=mean([metric(d, "arm_angular_velocity") for d in ds]),
+                    not_legal=sum(d.legality.verdict == "not_legal" for d in ds),
+                    items=[
+                        ProgressDelivery(
+                            delivery_id=ids[i],
+                            idx=d.delivery_idx,
+                            technique=d.technique_score,
+                            elbow_extension_deg=d.legality.elbow_extension_deg,
+                            verdict=d.legality.verdict,
+                        )
+                        for i, d in enumerate(ds)
+                        if i < len(ids)
+                    ],
+                )
+            )
+        points.sort(key=lambda p: p.day)
+        every = [it for p in points for it in p.items]
+        return ProgressOut(
+            bowler_id=bowler_id,
+            points=points,
+            best=max(every, key=lambda it: it.technique, default=None),
+            worst=min(every, key=lambda it: it.technique, default=None),
         )
 
     # --- sessions -------------------------------------------------------------------------
@@ -606,6 +716,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state.repo.update_delivery(delivery_id, updated.deliveries[ref.idx])
         return get_delivery(delivery_id)
 
+    def _delivery_files(delivery_id: str) -> tuple[DeliveryRef, SessionResult, Path]:
+        ref = state.repo.get_delivery(delivery_id)
+        result = state.result(ref.session_id)
+        if result is None or ref.idx >= len(result.deliveries):
+            raise HTTPException(404, "The delivery's results are missing.")
+        return ref, result, state.output_dir(ref.session_id)
+
+    @app.get("/deliveries/{delivery_id}/clip")
+    def release_clip(
+        delivery_id: str, fmt: Annotated[Literal["mp4", "gif"], Query(alias="format")] = "mp4"
+    ) -> FileResponse:
+        """A slow-motion clip of the release (skeleton, wrist path and angles burned in), made
+        on first request and cached until the release frame changes."""
+        ref, result, out_dir = _delivery_files(delivery_id)
+        d = result.deliveries[ref.idx]
+        pose_path = out_dir / "pose.json"
+        if not pose_path.is_file():
+            raise HTTPException(409, "This session has no saved skeleton to draw the clip from.")
+        session = state.repo.get_session(ref.session_id)
+        name = f"release_{ref.idx + 1}_f{d.clip_start + d.phases.release}.{fmt}"
+        target = out_dir / "clips" / name
+        if not target.is_file():
+            seq = PoseSequence.model_validate_json(pose_path.read_text(encoding="utf-8"))
+            write_release_clip(
+                state.storage.resolve(session.video_path, within="raw"), seq, d,
+                settings.render, target, fmt,
+            )  # fmt: skip
+        return FileResponse(
+            target,
+            media_type="video/mp4" if fmt == "mp4" else "image/gif",
+            filename=f"bowlsense_delivery{ref.idx + 1}_release.{fmt}",
+        )
+
+    @app.get("/deliveries/{delivery_id}/annotations")
+    def get_annotations(delivery_id: str) -> AnnotationsIn:
+        """The lines and angles drawn on this delivery's frames."""
+        ref, _, out_dir = _delivery_files(delivery_id)
+        path = out_dir / "annotations" / f"{ref.idx}.json"
+        if not path.is_file():
+            return AnnotationsIn(annotations=[])
+        return AnnotationsIn.model_validate_json(path.read_text(encoding="utf-8"))
+
+    @app.put("/deliveries/{delivery_id}/annotations")
+    def put_annotations(delivery_id: str, body: AnnotationsIn) -> AnnotationsIn:
+        """Replace the lines and angles drawn on this delivery's frames."""
+        ref, _, out_dir = _delivery_files(delivery_id)
+        path = out_dir / "annotations" / f"{ref.idx}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body.model_dump_json(), encoding="utf-8")
+        return body
+
     @app.get("/sessions/{session_id}/video")
     def session_video(session_id: str) -> FileResponse:
         """The uploaded video (HTTP Range supported), for the overlay toggle."""
@@ -668,6 +829,11 @@ API_MODELS: tuple[type[BaseModel], ...] = (
     ReferencesOut, ReferenceAction, Drill, DeliveryOut, ImageAnalysis, ImageCheck,
     BowlerChoiceIn,
     ReleaseIn,
+    Annotation,
+    AnnotationsIn,
+    ProgressDelivery,
+    ProgressPoint,
+    ProgressOut,
     EvaluationReport,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

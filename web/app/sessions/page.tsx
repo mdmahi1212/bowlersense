@@ -72,6 +72,8 @@ export default function SessionsPage() {
           {sessions.data.map((s, i) => (
             <li
               key={s.id}
+              data-reveal
+              style={{ "--d": `${Math.min(i, 10) * 50}ms` } as React.CSSProperties}
               className="group grid grid-cols-[3rem_minmax(0,1fr)_auto] items-baseline gap-x-6 gap-y-1 border-b border-border py-5 md:grid-cols-[3rem_minmax(0,1fr)_12rem_9rem_5rem]"
             >
               <span className="tabular text-xs text-muted">
@@ -79,7 +81,7 @@ export default function SessionsPage() {
               </span>
               <Link
                 href={`/sessions/${s.id}`}
-                className="truncate font-display text-2xl leading-snug group-hover:text-accent"
+                className="lift truncate font-display text-2xl leading-snug group-hover:text-accent"
                 title={s.original_name ?? undefined}
               >
                 {cleanName(s.original_name)}

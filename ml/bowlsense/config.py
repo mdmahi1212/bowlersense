@@ -410,6 +410,13 @@ class RenderSettings(_Section):
     conf_high: float = Field(ge=0, le=1)
     tint_alpha: float = Field(ge=0, le=1)
     keyframe_events: tuple[str, ...] = Field(min_length=1)
+    clip_before_s: float = Field(default=0.35, gt=0, le=3)
+    clip_after_s: float = Field(default=0.25, gt=0, le=3)
+    clip_slowdown: float = Field(default=8, ge=1, le=64)
+    clip_fps: float = Field(default=30, gt=0, le=120)
+    clip_hold_s: float = Field(default=0.8, ge=0, le=5)
+    clip_max_height: int = Field(default=720, ge=120, le=2160)
+    gif_width: int = Field(default=480, ge=120, le=1280)
 
     @model_validator(mode="after")
     def _check(self) -> RenderSettings:

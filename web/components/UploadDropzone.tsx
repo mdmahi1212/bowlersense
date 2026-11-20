@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
-import { BowlerAtRelease } from "@/components/art/Figures";
+import { BowlingLoop } from "@/components/art/BowlingLoop";
 import { cn } from "@/lib/utils";
 
 const ACCEPT =
@@ -59,7 +59,7 @@ export function UploadDropzone({
       onDragLeave={() => setOver(false)}
       onDrop={drop}
       className={cn(
-        "group relative grid cursor-pointer items-center gap-8 overflow-hidden bg-plate p-8 text-[#f2eee5] transition-[outline] sm:grid-cols-[180px_minmax(0,1fr)]",
+        "group relative grid cursor-pointer items-center gap-8 overflow-hidden bg-plate p-8 text-[#f2eee5] transition-[outline] sm:grid-cols-[260px_minmax(0,1fr)]",
         over
           ? "outline outline-2 outline-offset-4 outline-accent"
           : "hover:outline hover:outline-1 hover:outline-offset-4 hover:outline-foreground/40",
@@ -74,7 +74,7 @@ export function UploadDropzone({
         data-testid="video-input"
         onChange={(e) => pick(e.target.files?.[0])}
       />
-      <BowlerAtRelease className="mx-auto h-44 w-auto text-[#f2eee5] sm:h-48" />
+      <BowlingLoop className="mx-auto h-52 w-auto text-[#f2eee5] sm:h-60" />
       <div>
         {file ? (
           <>

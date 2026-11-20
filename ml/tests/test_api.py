@@ -454,3 +454,40 @@ def test_user_sets_release_frame(done: Env) -> None:
     assert again["phases"]["release"] == frame
     bad = done.client.post(f"/deliveries/{did}/release", json={"frame": 99999})
     assert bad.status_code == 422
+
+
+def test_release_clip_mp4_and_gif(done: Env) -> None:
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    mp4 = done.client.get(f"/deliveries/{did}/clip")
+    assert mp4.status_code == 200, mp4.text
+    assert mp4.headers["content-type"] == "video/mp4" and mp4.content[4:8] == b"ftyp"
+    assert "attachment" in mp4.headers["content-disposition"]
+    gif = done.client.get(f"/deliveries/{did}/clip", params={"format": "gif"})
+    assert gif.status_code == 200 and gif.content[:6] in (b"GIF89a", b"GIF87a")
+    assert done.client.get(f"/deliveries/{did}/clip", params={"format": "avi"}).status_code == 422
+
+
+def test_annotations_roundtrip(done: Env) -> None:
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    assert done.client.get(f"/deliveries/{did}/annotations").json() == {"annotations": []}
+    body = {
+        "annotations": [
+            {"kind": "angle", "frame": 12, "points": [[1, 2], [3, 4], [5, 6]], "label": "trunk"},
+            {"kind": "line", "frame": 3, "points": [[0, 0], [10, 10]], "label": ""},
+        ]
+    }
+    assert done.client.put(f"/deliveries/{did}/annotations", json=body).status_code == 200
+    assert done.client.get(f"/deliveries/{did}/annotations").json() == body
+    bad = {"annotations": [{"kind": "angle", "frame": 1, "points": [[0, 0]]}]}
+    assert done.client.put(f"/deliveries/{did}/annotations", json=bad).status_code == 422
+
+
+def test_bowler_progress(done: Env) -> None:
+    body = done.client.get(f"/bowlers/{done.bowler_id}/progress").json()
+    assert len(body["points"]) == 1
+    p = body["points"][0]
+    assert p["session_id"] == _sid(done) and p["deliveries"] == len(p["items"]) == 1
+    assert (
+        0 <= p["technique"] <= 100 and body["best"]["delivery_id"] == p["items"][0]["delivery_id"]
+    )
+    assert done.client.get("/bowlers/nope/progress").status_code == 404

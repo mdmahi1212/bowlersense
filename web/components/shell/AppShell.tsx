@@ -40,6 +40,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useReveal(path);
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-foreground">
@@ -57,10 +59,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href={href}
                 aria-current={active(path, href) ? "page" : undefined}
                 className={cn(
-                  "border-b-2 pb-1 transition-colors",
-                  active(path, href)
-                    ? "border-accent text-foreground"
-                    : "border-transparent text-muted hover:text-foreground",
+                  "uline pb-1 transition-colors",
+                  active(path, href) ? "text-foreground" : "text-muted hover:text-foreground",
                 )}
               >
                 {label}
@@ -85,4 +85,29 @@ export function AppShell({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** Fade up every [data-reveal] element as it scrolls into view, including ones added later. */
+function useReveal(path: string) {
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.setAttribute("data-in", "");
+            io.unobserve(e.target);
+          }
+        }),
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
+    );
+    const scan = () =>
+      document.querySelectorAll("[data-reveal]:not([data-in])").forEach((el) => io.observe(el));
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      io.disconnect();
+      mo.disconnect();
+    };
+  }, [path]);
 }

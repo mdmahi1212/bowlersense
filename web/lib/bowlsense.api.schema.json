@@ -8,6 +8,12 @@
     "AngleSeries": {
       "$ref": "#/$defs/AngleSeries"
     },
+    "Annotation": {
+      "$ref": "#/$defs/Annotation"
+    },
+    "AnnotationsIn": {
+      "$ref": "#/$defs/AnnotationsIn"
+    },
     "BallMetrics": {
       "$ref": "#/$defs/BallMetrics"
     },
@@ -112,6 +118,15 @@
     },
     "PoseSequence": {
       "$ref": "#/$defs/PoseSequence"
+    },
+    "ProgressDelivery": {
+      "$ref": "#/$defs/ProgressDelivery"
+    },
+    "ProgressOut": {
+      "$ref": "#/$defs/ProgressOut"
+    },
+    "ProgressPoint": {
+      "$ref": "#/$defs/ProgressPoint"
     },
     "ReferenceAction": {
       "$ref": "#/$defs/ReferenceAction"
@@ -299,6 +314,75 @@
         "frames"
       ],
       "title": "AngleSeries",
+      "type": "object"
+    },
+    "Annotation": {
+      "description": "A measurement drawn on a frame: a line (2 points) or an angle (3 points, vertex in the\nmiddle). Points are in video pixels; ``frame`` is clip-relative.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "line",
+            "angle"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "frame": {
+          "minimum": 0,
+          "title": "Frame",
+          "type": "integer"
+        },
+        "points": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "title": "Points",
+          "type": "array"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 60,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "frame",
+        "points",
+        "label"
+      ],
+      "title": "Annotation",
+      "type": "object"
+    },
+    "AnnotationsIn": {
+      "description": "Body of ``PUT /deliveries/{id}/annotations`` (replaces them all).",
+      "properties": {
+        "annotations": {
+          "items": {
+            "$ref": "#/$defs/Annotation"
+          },
+          "maxItems": 200,
+          "title": "Annotations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "annotations"
+      ],
+      "title": "AnnotationsIn",
       "type": "object"
     },
     "BallMetrics": {
@@ -2375,7 +2459,7 @@
     },
     "LegalityResult": {
       "additionalProperties": false,
-      "description": "Elbow-extension screening result.\n\n``verdict`` is the plain answer shown to the user: ``legal`` (elbow straightened no more\nthan the threshold), ``not_legal`` (more than the threshold) or ``cannot_judge`` (the clip\ncan't support a measurement; see ``not_screened_reason``). ``verdict_text`` says it in words.\n\n``screened`` is False when the clip can't support a trustworthy measurement (low fps,\ncamera view, phase events out of order, implausible value); then ``flagged`` is always\nFalse and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.",
+      "description": "Elbow-extension screening result.\n\n``verdict`` is the plain answer shown to the user and always follows the measured angle:\n``legal`` (elbow straightened no more than the threshold) or ``not_legal`` (more).\n``cannot_judge`` only appears in results saved by older versions and is upgraded on load.\n``verdict_text`` says it in words.\n\n``screened`` is False when the clip can't support a trustworthy measurement (low fps,\ncamera view, phase events out of order, implausible value); the verdict is then\nunverified and ``not_screened_reason`` says why.",
       "properties": {
         "elbow_extension_deg": {
           "title": "Elbow Extension Deg",
@@ -2685,6 +2769,178 @@
         "frames"
       ],
       "title": "PoseSequence",
+      "type": "object"
+    },
+    "ProgressDelivery": {
+      "description": "One delivery in a bowler's progress history.",
+      "properties": {
+        "delivery_id": {
+          "title": "Delivery Id",
+          "type": "string"
+        },
+        "idx": {
+          "title": "Idx",
+          "type": "integer"
+        },
+        "technique": {
+          "title": "Technique",
+          "type": "number"
+        },
+        "elbow_extension_deg": {
+          "title": "Elbow Extension Deg",
+          "type": "number"
+        },
+        "verdict": {
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "delivery_id",
+        "idx",
+        "technique",
+        "elbow_extension_deg",
+        "verdict"
+      ],
+      "title": "ProgressDelivery",
+      "type": "object"
+    },
+    "ProgressOut": {
+      "description": "``GET /bowlers/{id}/progress``: sessions oldest first, plus the best and worst balls.",
+      "properties": {
+        "bowler_id": {
+          "title": "Bowler Id",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/ProgressPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        },
+        "best": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgressDelivery"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worst": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProgressDelivery"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "bowler_id",
+        "points",
+        "best",
+        "worst"
+      ],
+      "title": "ProgressOut",
+      "type": "object"
+    },
+    "ProgressPoint": {
+      "description": "One finished session of a bowler, summarised for the progress charts.",
+      "properties": {
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "day": {
+          "format": "date-time",
+          "title": "Day",
+          "type": "string"
+        },
+        "deliveries": {
+          "title": "Deliveries",
+          "type": "integer"
+        },
+        "technique": {
+          "title": "Technique",
+          "type": "number"
+        },
+        "injury": {
+          "title": "Injury",
+          "type": "number"
+        },
+        "elbow_extension_max": {
+          "title": "Elbow Extension Max",
+          "type": "number"
+        },
+        "release_height_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Release Height Pct"
+        },
+        "stride_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stride Pct"
+        },
+        "arm_speed_deg_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Arm Speed Deg S"
+        },
+        "not_legal": {
+          "title": "Not Legal",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ProgressDelivery"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "session_id",
+        "name",
+        "day",
+        "deliveries",
+        "technique",
+        "injury",
+        "elbow_extension_max",
+        "release_height_pct",
+        "stride_pct",
+        "arm_speed_deg_s",
+        "not_legal",
+        "items"
+      ],
+      "title": "ProgressPoint",
       "type": "object"
     },
     "ReferenceAction": {

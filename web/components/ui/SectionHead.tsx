@@ -13,7 +13,10 @@ export function SectionHead({
   n?: string;
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-2 border-t border-foreground pt-3">
+    <div
+      data-reveal
+      className="rule-draw mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-2 pt-3"
+    >
       <div>
         <h2 className="font-display text-2xl leading-tight">
           {n && <span className="tabular mr-3 align-middle text-xs text-accent">{n}</span>}

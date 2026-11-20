@@ -176,6 +176,13 @@ render:
   conf_high: 0.7             # ...amber in between, green at or above this
   tint_alpha: 0.25           # red tint strength on frames in a flagged legality window
   keyframe_events: [bfc, ffc, arm_horizontal, release, follow_through_end]
+  clip_before_s: 0.35        # slow-motion release clip: real time before release...
+  clip_after_s: 0.25         # ...and after it
+  clip_slowdown: 8           # the clip plays this many times slower than real time
+  clip_fps: 30               # output frame rate of the clip
+  clip_hold_s: 0.8           # freeze on the release frame for this long
+  clip_max_height: 720       # the clip is cropped to the bowler and scaled to at most this
+  gif_width: 480             # GIF export width (px)
 clipping:
   before_release_s: 2.5      # each delivery clip starts this long before release...
   after_release_s: 1.5       # ...and ends this long after

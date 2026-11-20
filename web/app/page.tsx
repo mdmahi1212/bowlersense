@@ -60,6 +60,7 @@ export default function UploadPage() {
     "w-full border-b border-foreground/60 bg-transparent py-2 outline-none focus:border-accent";
   return (
     <div className="grid gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+      <Ticker />
       <section>
         <PageHead
           kicker="New analysis"
@@ -180,7 +181,12 @@ export default function UploadPage() {
         <CameraSetup className="mt-6 w-full text-foreground" />
         <ol className="mt-6 divide-y divide-border border-y border-border">
           {TIPS.map((t, i) => (
-            <li key={t} className="grid grid-cols-[2.5rem_1fr] py-3 text-sm leading-relaxed">
+            <li
+              key={t}
+              data-reveal
+              style={{ "--d": `${120 * i}ms` } as React.CSSProperties}
+              className="grid grid-cols-[2.5rem_1fr] py-3 text-sm leading-relaxed"
+            >
               <span className="tabular text-accent">{String(i + 1).padStart(2, "0")}</span>
               {t}
             </li>
@@ -191,9 +197,43 @@ export default function UploadPage() {
   );
 }
 
+const FACTS = [
+  ["Release frame found within ±1 frame", "86.9%"],
+  ["Bowling arm identified", "94.0%"],
+  ["Camera view recognised", "93.2%"],
+  ["Right bowler picked from a crowd", "88.2%"],
+  ["Legality screening F1", "0.94"],
+  ["Joints tracked per frame", "21"],
+  ["Biomechanics measured per delivery", "33"],
+  ["Data sent to the cloud", "0 bytes"],
+];
+
+/** A slow-moving strip of the system's measured accuracy (from the evaluation suite). */
+function Ticker() {
+  const row = FACTS.map(([k, v]) => (
+    <span key={k} className="flex shrink-0 items-baseline gap-3 pr-14">
+      <span className="tabular text-accent">{v}</span>
+      <span className="text-muted">{k}</span>
+    </span>
+  ));
+  return (
+    <div
+      className="col-span-full -mt-2 overflow-hidden border-y border-border py-2.5 text-sm [mask-image:linear-gradient(90deg,transparent,#000_6%,#000_94%,transparent)]"
+      aria-label="Measured accuracy"
+    >
+      <div className="ticker flex w-max">
+        {row}
+        <span aria-hidden="true" className="flex">
+          {row}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-4 sm:grid-cols-[3rem_minmax(0,1fr)]">
+    <section data-reveal className="grid gap-4 sm:grid-cols-[3rem_minmax(0,1fr)]">
       <span className="tabular pt-1.5 text-xs text-accent">{n}</span>
       <div>
         <h2 className="mb-4 font-display text-xl">{title}</h2>

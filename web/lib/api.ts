@@ -3,6 +3,9 @@
  * which is generated from the Python pydantic models.
  */
 import type {
+  Annotation,
+  AnnotationsIn,
+  ProgressOut,
   BowlerIn,
   BowlerRecord,
   CalibrationIn,
@@ -145,11 +148,21 @@ export const api = {
       method: "POST",
       ...json({ frame }),
     }),
+  annotations: (id: string) =>
+    request<AnnotationsIn>(`/deliveries/${encodeURIComponent(id)}/annotations`),
+  saveAnnotations: (id: string, annotations: Annotation[]) =>
+    request<AnnotationsIn>(`/deliveries/${encodeURIComponent(id)}/annotations`, {
+      method: "PUT",
+      ...json({ annotations }),
+    }),
+  progress: (id: string) => request<ProgressOut>(`/bowlers/${encodeURIComponent(id)}/progress`),
   evaluation: () => request<EvaluationReport>("/evaluation"),
   drills: () => request<Record<string, Drill[]>>("/drills"),
   references: () => request<ReferencesOut>("/references"),
 
   reportUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/report.pdf`,
+  clipUrl: (id: string, format: "mp4" | "gif") =>
+    `${apiBase()}/deliveries/${encodeURIComponent(id)}/clip?format=${format}`,
   videoUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/video`,
   eventsUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/events`,
 };

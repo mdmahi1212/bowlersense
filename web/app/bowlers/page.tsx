@@ -11,6 +11,8 @@ import { Empty, ErrorBox, Loading } from "@/components/ui/States";
 import { api, errorText } from "@/lib/api";
 import type { BowlerRecord } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { ProgressPanel } from "@/components/ProgressPanel";
+import { SectionHead } from "@/components/ui/SectionHead";
 import { fmtDate } from "@/lib/utils";
 
 export default function BowlersPage() {
@@ -25,7 +27,7 @@ export default function BowlersPage() {
         title="Bowlers"
         deck="Profiles, their sessions and training load. Acute:chronic workload between 0.8 and 1.3 is the usual safe band."
       />
-      <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
+      <div className="grid gap-10 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-4">
           <NewBowler
             onCreated={(b) => {
@@ -73,8 +75,22 @@ export default function BowlersPage() {
 function BowlerDetail({ bowler }: { bowler: BowlerRecord }) {
   const workload = useAsync(() => api.workload(bowler.id), [bowler.id]);
   const sessions = useAsync(() => api.sessions(bowler.id), [bowler.id]);
+  const progress = useAsync(() => api.progress(bowler.id), [bowler.id]);
   return (
-    <div className="space-y-4">
+    <div className="space-y-10">
+      <section>
+        <SectionHead
+          n="01"
+          title={`${bowler.name}: progress`}
+          hint="Every finished session, oldest to newest. Pick a measure to chart it."
+        />
+        {progress.error && <ErrorBox error={progress.error} />}
+        {progress.data ? (
+          <ProgressPanel progress={progress.data} />
+        ) : (
+          !progress.error && <Loading />
+        )}
+      </section>
       <Card>
         <CardTitle>Workload (acute : chronic ratio)</CardTitle>
         {workload.error && <p className="text-sm text-bad">{workload.error}</p>}
