@@ -286,3 +286,14 @@ def test_bowler_validation(env: Env) -> None:
     assert ok.status_code == 201 and ok.json()["dob"] == "2005-02-03"
     assert [b["name"] for b in env.client.get("/bowlers").json()] == ["Ann"]
     assert env.client.get("/bowlers/nope/workload").status_code == 404
+
+
+def test_raw_video_drills_and_references(done: Env) -> None:
+    video = done.client.get(f"/sessions/{_sid(done)}/video", headers={"Range": "bytes=0-9"})
+    assert video.status_code == 206 and len(video.content) == 10
+    assert done.client.get("/sessions/nope/video").status_code == 404
+    drills = done.client.get("/drills").json()
+    assert len(drills) == 10 and all(2 <= len(v) <= 3 for v in drills.values())
+    refs = done.client.get("/references").json()
+    assert len(refs["references"]) >= 2 and ["l_shoulder", "r_shoulder"] in refs["edges"]
+    assert all(r["name"].startswith("Reference: ") for r in refs["references"])

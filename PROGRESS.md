@@ -1,5 +1,12 @@
 # BowlSense — Progress
 
+## Phase 13: SQLite schema + Alembic + local storage ✅ (2026-11-20)
+
+Most of this was built in Phase 1: ORM tables, Alembic, WAL, foreign keys, cascades, `BEGIN IMMEDIATE` claims, safe storage paths, and the repo-level two-process test. Phase 12 added migration `0002`. This phase adds the gate's real-process check:
+- `test_processes.py`: the actual `python -m bowlsense.api` (uvicorn, on a free port) and `python -m bowlsense.worker` run as two processes on one temporary SQLite file with `BOWLSENSE_OFFLINE=1`. Three uploads are processed while the API keeps writing bowler rows. Every session finishes, SSE reports done, workload sums the balls, and neither log contains `database is locked` or an offline violation.
+- `test_api.py`: tests for the raw-video endpoint (Range), `/drills` and `/references`.
+- Gate status: `alembic upgrade head` on an empty DB (`test_db.py`), cascade delete of rows and files (`test_db.py`, `test_api.py`), and concurrent API and worker writes (`test_db.py`, `test_processes.py`) all pass.
+
 ## Phase 12: Full pipeline + CLI + FastAPI + worker ✅ (2026-11-20)
 
 - **`pipeline.run_pipeline`** runs a video through every stage and writes overlay.mp4, keyframes, charts, report.pdf, pose.json, coach_summary.json and result.json. It returns a `SessionResult`, reports progress (0–100 % plus a stage name) through a callback, and works with the offline guard on.
@@ -281,4 +288,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 13: SQLite/Alembic/storage gate (two-process concurrency test).
+**Next**: Phase 14: Next.js app (all pages) + Playwright smoke test.
