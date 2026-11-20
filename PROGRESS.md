@@ -1,5 +1,18 @@
 # BowlSense — Progress
 
+## Phase 10: Module G (comparison, consistency, bowler ID) ✅ (2026-11-20)
+
+**Done**
+- `analysis/compare.py`: per-frame joint angles (bowling elbow, front knee, bowling shoulder, trunk lean, shoulder-vs-hip line tilt; deg/180), time-normalised from BFC to follow-through end (50 points). DTW via tslearn → `similarity % = 100·exp(−dtw/2.0)` and per-joint mean deviation (deg) along the DTW path. On synthetic data an identical action is 100%, a close one ~80%, and a distorted one (22° elbow + 30° knee collapse) ~63%. Invariant to fps (≥ 90%), bowling arm (> 99%, joints by role) and camera distance (> 99%).
+- `scripts/make_references.py` → `data/reference/{side_on,semi_open,front_on}.json` ("Reference: textbook …", synthetic; never a real player). Each delivery now carries `comparisons` (most similar first).
+- **Consistency** = 100 − mean coefficient of variation of technique score, elbow extension, stride, release height and knee collapse (a 10-unit floor keeps near-zero metrics from exploding). `None` with < 2 deliveries. Added to the session and `result.json`.
+- `analysis/bowler_id.py`: a GRU over the angle curves; trains only with ≥ 3 bowlers × ≥ 20 deliveries, otherwise returns `"insufficient data"` with what's missing. (Feeding it from the database per bowler is part of Phase 12.)
+- tslearn 0.10.0 pinned (scikit-learn is now a runtime dependency through it).
+
+**Gate**: identical sequences → 100% similarity (and 0° deviation). 10 new tests (656 total). Bowler ID on 3 synthetic bowler styles × 20 deliveries → ≥ 80% on held-out deliveries; the insufficient-data path is tested.
+
+**Note**: from a side-on camera, shoulder/hip alignment barely shows in 2D, so side-view DTW reflects overall joint-curve similarity rather than action type (the alignment module covers action type from front/behind views).
+
 ## Training on the real bowling dataset ✅ (2026-11-20)
 
 **Dataset** (`C:\dev\dataset`, outside the repo; set `--dataset` or `BOWLSENSE_DATASET`): 40 club-cricket videos, 1280×720 at 30 fps, ~4.4 h. Split: 18 train / 8 test / 14 unlabelled challenge. Labels: **279 single-frame ball releases** (each preceded by an "is bowling" span), pace/spin, bowler hand, over/around the wicket; per-frame person boxes with roles; camera direction. Please confirm the dataset's licence allows use in your project.
@@ -226,4 +239,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 10: module G (DTW comparison against synthetic reference actions, consistency score, bowler ID with the insufficient-data path).
+**Next**: Phase 11: coach (drills, local Ollama report + template fallback, chat).

@@ -280,6 +280,44 @@
       "title": "BallTrack",
       "type": "object"
     },
+    "ConsistencyResult": {
+      "additionalProperties": false,
+      "description": "Consistency across a session's deliveries (module G).",
+      "properties": {
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "variation_pct": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Variation Pct",
+          "type": "object"
+        },
+        "n_deliveries": {
+          "minimum": 0,
+          "title": "N Deliveries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "variation_pct",
+        "n_deliveries"
+      ],
+      "title": "ConsistencyResult",
+      "type": "object"
+    },
     "DeliveryAnalysis": {
       "additionalProperties": false,
       "description": "Modules A-D (and E's per-delivery inputs) for one delivery.",
@@ -347,6 +385,13 @@
             }
           ],
           "default": null
+        },
+        "comparisons": {
+          "items": {
+            "$ref": "#/$defs/ReferenceComparison"
+          },
+          "title": "Comparisons",
+          "type": "array"
         }
       },
       "required": [
@@ -1218,6 +1263,36 @@
         "frames"
       ],
       "title": "PoseSequence",
+      "type": "object"
+    },
+    "ReferenceComparison": {
+      "additionalProperties": false,
+      "description": "How closely an action matches one reference action (module G).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "similarity_pct": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Similarity Pct",
+          "type": "number"
+        },
+        "deviation_deg": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Deviation Deg",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "similarity_pct",
+        "deviation_deg"
+      ],
+      "title": "ReferenceComparison",
       "type": "object"
     },
     "RiskComponent": {

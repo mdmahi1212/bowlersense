@@ -34,6 +34,6 @@ addopts = "-q"
 
 [[tool.mypy.overrides]]
 # Third-party packages without type information; our own code stays strict.
-module = ["rtmlib", "rtmlib.*", "onnxruntime", "onnxruntime.*", "mediapipe", "mediapipe.*", "ultralytics", "ultralytics.*", "imageio_ffmpeg", "reportlab", "reportlab.*", "sklearn", "sklearn.*"]
+module = ["rtmlib", "rtmlib.*", "onnxruntime", "onnxruntime.*", "mediapipe", "mediapipe.*", "ultralytics", "ultralytics.*", "imageio_ffmpeg", "reportlab", "reportlab.*", "sklearn", "sklearn.*", "tslearn", "tslearn.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

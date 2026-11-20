@@ -130,6 +130,7 @@ def analyze(args: argparse.Namespace) -> int:
             for w, d in zip(session.windows, session.deliveries, strict=True)
         ],
         "fatigue": session.fatigue.model_dump(mode="json"),
+        "consistency": session.consistency.model_dump(mode="json"),
         "artifacts": {
             "overlay": overlay.name,
             "report": report.name,

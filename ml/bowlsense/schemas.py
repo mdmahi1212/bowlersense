@@ -279,6 +279,22 @@ class BallMetrics(_Model):
     notes: list[str]
 
 
+class ReferenceComparison(_Model):
+    """How closely an action matches one reference action (module G)."""
+
+    name: str
+    similarity_pct: float = Field(ge=0, le=100)
+    deviation_deg: dict[str, float]  # mean absolute difference per joint along the DTW path
+
+
+class ConsistencyResult(_Model):
+    """Consistency across a session's deliveries (module G)."""
+
+    score: float | None = Field(default=None, ge=0, le=100)  # None with < 2 deliveries
+    variation_pct: dict[str, float]
+    n_deliveries: int = Field(ge=0)
+
+
 class DeliveryTypeResult(_Model):
     """Pace or spin (learned classifier), with the probability of pace."""
 
@@ -300,6 +316,7 @@ class DeliveryAnalysis(_Model):
     release_source: Literal["rules", "model"] = "rules"
     ball: BallMetrics | None = None
     ball_track: BallTrack | None = None
+    comparisons: list[ReferenceComparison] = Field(default_factory=list)
 
 
 class DeliveryMetrics(_Model):
@@ -395,6 +412,8 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     InjuryFeatures,
     LegalityResult,
     AlignmentResult,
+    ReferenceComparison,
+    ConsistencyResult,
     DeliveryTypeResult,
     DeliveryAnalysis,
     DeliveryMetrics,

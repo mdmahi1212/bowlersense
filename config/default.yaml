@@ -122,6 +122,16 @@ delivery:
   position_error_px: 2.0       # assumed bounce-point error in the image...
   max_length_error_m: 0.5      # ...report length only if it moves the bounce less than this
   max_line_error_m: 0.15       # ...and line only if less than this (stumps are 0.23 m wide)
+compare:
+  resample_points: 50          # each action is time-normalised (BFC -> follow-through end) to this many points
+  similarity_scale: 2.0        # similarity % = 100 * exp(-dtw_distance / scale)
+  reference_dir: data/reference
+  consistency_metrics: [technique_score, elbow_extension_deg, stride_pct, release_height_pct, knee_collapse_deg]
+bowler_id:
+  min_bowlers: 3
+  min_deliveries_per_bowler: 20
+  epochs: 150
+  hidden: 32
 ball:
   yolo_class: 32               # COCO "sports ball"
   det_conf: 0.1

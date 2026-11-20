@@ -315,6 +315,29 @@ class DeliverySettings(_Section):
         return self
 
 
+class CompareSettings(_Section):
+    """Module G: comparison with reference actions and consistency."""
+
+    resample_points: int = Field(ge=10)
+    similarity_scale: float = Field(gt=0)
+    reference_dir: Path
+    consistency_metrics: tuple[str, ...] = Field(min_length=1)
+
+    @property
+    def reference_path(self) -> Path:
+        """Absolute folder of reference action JSONs."""
+        return _resolve(self.reference_dir)
+
+
+class BowlerIdSettings(_Section):
+    """Module G: bowler identification."""
+
+    min_bowlers: int = Field(ge=2)
+    min_deliveries_per_bowler: int = Field(ge=2)
+    epochs: int = Field(ge=1)
+    hidden: int = Field(ge=4)
+
+
 class BallSettings(_Section):
     """Ball detection and tracking."""
 
@@ -481,6 +504,8 @@ class Settings(_Section):
     fatigue: FatigueSettings
     workload: WorkloadSettings
     delivery: DeliverySettings
+    compare: CompareSettings
+    bowler_id: BowlerIdSettings
     ball: BallSettings
     jobs: JobSettings
     api: ApiSettings

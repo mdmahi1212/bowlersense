@@ -13,6 +13,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from bowlsense.analysis.alignment import assess_alignment
+from bowlsense.analysis.compare import compare_to_references, consistency, load_references
 from bowlsense.analysis.delivery import assess_ball
 from bowlsense.analysis.fatigue import assess_fatigue, delivery_fatigue_input
 from bowlsense.analysis.faults import assess_faults
@@ -44,6 +45,7 @@ from bowlsense.schemas import (
     KEYPOINT_NAMES,
     Arm,
     BallTrack,
+    ConsistencyResult,
     DeliveryAnalysis,
     DeliveryTypeResult,
     FatigueResult,
@@ -230,6 +232,7 @@ class SessionAnalysis(BaseModel):
     windows: list[ClipWindow]
     deliveries: list[DeliveryAnalysis]
     fatigue: FatigueResult
+    consistency: ConsistencyResult
 
 
 def _with_ball(
@@ -282,5 +285,27 @@ def analyze_session(
             _with_ball(front, cleaned, w, d, detector, calibration, settings)
             for w, d in zip(windows, deliveries, strict=True)
         ]
+    references = load_references(settings.compare.reference_path)
+    if references:
+        deliveries = [
+            d.model_copy(
+                update={
+                    "comparisons": compare_to_references(
+                        clean_sequence(sub_sequence(raw, w), settings.pose).model_copy(
+                            update={"bowling_arm": raw.bowling_arm}
+                        ),
+                        d.phases,
+                        references,
+                        settings.compare,
+                    )
+                }
+            )
+            for w, d in zip(windows, deliveries, strict=True)
+        ]
     fatigue = assess_fatigue([d.fatigue_input for d in deliveries], settings.fatigue)
-    return SessionAnalysis(windows=windows, deliveries=deliveries, fatigue=fatigue)
+    return SessionAnalysis(
+        windows=windows,
+        deliveries=deliveries,
+        fatigue=fatigue,
+        consistency=consistency(deliveries, settings.compare),
+    )
