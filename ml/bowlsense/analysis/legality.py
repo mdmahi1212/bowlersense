@@ -252,8 +252,28 @@ def assess_legality(
     if estimated_ah:  # use a fixed window before release instead of an impossible AH
         ah = max(0, phases.release - max(2, round(settings.fallback_window_s * seq.fps)))
         phases = phases.model_copy(update={"arm_horizontal": ah})
-    fitted = fitted_elbow_angles(angles, phases.arm_horizontal, phases.release, seq.fps, settings)
-    extension = elbow_extension(fitted, phases.arm_horizontal, phases.release)
+    try:
+        fitted = fitted_elbow_angles(
+            angles, phases.arm_horizontal, phases.release, seq.fps, settings
+        )
+        extension = elbow_extension(fitted, phases.arm_horizontal, phases.release)
+    except InvalidInputError as err:  # elbow hidden around release: report, don't abort
+        return LegalityResult(
+            elbow_extension_deg=0.0,
+            threshold_deg=settings.elbow_extension_threshold_deg,
+            flagged=False,
+            screened=False,
+            measured=False,
+            verdict="cannot_judge",
+            verdict_text=(
+                "Can't measure: the bowling elbow isn't visible around release in this clip, so "
+                "there is no angle to judge. Film side-on with the bowling arm in view."
+            ),
+            not_screened_reason=f"Not measured: {err}",
+            confidence="low",
+            note="2D video screening only. The official ICC test uses 3D motion capture.",
+            front_foot_no_ball=None,
+        )
     confidence = _confidence(seq, phases, settings)
     note = "2D video screening only. The official ICC test uses 3D motion capture."
     if arm_is_3d(raw if raw is not None else seq):

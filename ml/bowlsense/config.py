@@ -87,6 +87,8 @@ class DetectSettings(_Section):
     person_conf: float = Field(gt=0, lt=1)
     tracker: str = Field(min_length=1)
     min_track_frames: int = Field(ge=1)
+    min_size_frac: float = Field(default=0.4, ge=0, lt=1)
+    dominant_mover_ratio: float = Field(default=2.0, ge=0)
     selector_model: str = Field(min_length=1)
     stitch_max_gap_s: float = Field(ge=0)
     stitch_max_jump: float = Field(gt=0)
@@ -128,6 +130,7 @@ class BodySettings(_Section):
 
     height_factor: float = Field(gt=0)
     height_top_frac: float = Field(gt=0, le=1)
+    segment_sum_frac: float = Field(default=0.9, gt=0.5, lt=1.0)
     runup_end_before_peak_s: float = Field(ge=0)
     ankle_height_pct: float = Field(ge=0)
     hand_length_pct: float = Field(ge=0)

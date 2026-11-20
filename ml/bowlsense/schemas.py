@@ -260,11 +260,13 @@ class LegalityResult(_Model):
     confidence: Confidence
     note: str = "2D video screening only. The official ICC test uses 3D motion capture."
     front_foot_no_ball: bool | None = None
+    measured: bool = True  # False when no elbow angle could be measured at all
 
     @model_validator(mode="after")
     def _verdict_from_angle(self) -> LegalityResult:
-        """Upgrade old "can't judge" results: the verdict follows the angle, marked unverified."""
-        if self.verdict == "cannot_judge":
+        """Upgrade old "can't judge" results: the verdict follows the angle, marked unverified.
+        Only when an angle was measured; with none, "can't judge" stays."""
+        if self.verdict == "cannot_judge" and self.measured:
             flagged = self.elbow_extension_deg > self.threshold_deg
             word = "Not legal" if flagged else "Legal"
             rel = "more than" if flagged else "within"

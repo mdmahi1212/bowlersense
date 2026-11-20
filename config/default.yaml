@@ -18,6 +18,8 @@ video:
 detect:
   yolo_model: yolo11n.pt          # in models/; person (class 0) and sports ball (class 32)
   accurate_yolo_model: yolo11x.pt # used by the accurate profile (pose.accuracy)
+  min_size_frac: 0.4              # ignore people under 40% of the tallest person's size when picking the bowler
+  dominant_mover_ratio: 2.0       # someone moving 2x more than anyone else is the bowler (0 = off)
   person_conf: 0.3
   tracker: bytetrack.yaml         # bundled with ultralytics
   min_track_frames: 10            # shorter tracks are ignored when picking the bowler

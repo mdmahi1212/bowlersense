@@ -323,6 +323,14 @@ class TrackScorer(Protocol):
     ) -> FloatArray: ...
 
 
+def track_travel(track: PersonTrack) -> float:
+    """Total distance (pixels) the box centre moves over the track."""
+    if len(track.boxes) < 2:
+        return 0.0
+    c = np.array([((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for b in track.boxes])
+    return float(np.abs(np.diff(c, axis=0)).sum())
+
+
 def select_bowler(
     tracks: list[PersonTrack],
     frame_width: int,
@@ -332,6 +340,8 @@ def select_bowler(
     scorer: TrackScorer | None = None,
     frame_height: int = 0,
     n_frames: int = 0,
+    min_size_frac: float = 0.0,
+    dominant_ratio: float = 0.0,
 ) -> PersonTrack:
     """The bowler, or the ``override_id`` track if given.
 
@@ -340,6 +350,10 @@ def select_bowler(
     horizontal speed, each normalised by the best among the tracks. On 279 labelled match
     deliveries the rule picked the bowler 70.6% of the time (the tracker had the bowler
     93.9% of the time); see ``data/training/reports``.
+
+    ``min_size_frac`` drops tracks whose median box height is below that fraction of the
+    tallest track's (distant fielders and spectators) before scoring. ``dominant_ratio``:
+    a track whose total travel is that many times anyone else's is the bowler outright.
 
     Raises:
         NoBowlerDetectedError: if no usable track exists or ``override_id`` isn't one.
@@ -358,6 +372,23 @@ def select_bowler(
             f"No person was tracked for at least {min_frames} frames "
             f"({len(tracks)} short track(s) found)."
         )
+    if min_size_frac > 0 and len(usable) > 1:
+        # a bowler is never tiny next to the biggest person in the clip: drop distant
+        # fielders and spectators before scoring (they fooled the selector on phone clips)
+        sizes = [float(np.median([b[3] - b[1] for b in t.boxes])) for t in usable]
+        big = max(sizes)
+        kept = [t for t, h in zip(usable, sizes, strict=True) if h >= min_size_frac * big]
+        if kept:
+            usable = kept
+    if dominant_ratio > 0 and len(usable) > 1:
+        # the bowler is the person who moves most: when one track's travel is at least
+        # ``dominant_ratio`` x everyone else's, take it without asking the scorer
+        moves = sorted(((track_travel(t), i) for i, t in enumerate(usable)), reverse=True)
+        if moves[0][0] >= dominant_ratio * max(moves[1][0], 1.0):
+            chosen = usable[moves[0][1]]
+            log.info("bowler: track %d (moves %.0f px, %.1fx anyone else)", chosen.track_id,
+                     moves[0][0], moves[0][0] / max(moves[1][0], 1.0))  # fmt: skip
+            return chosen
     if scorer is not None:
         height = frame_height or frame_width
         span = n_frames or max(t.frames[-1] for t in usable) + 1

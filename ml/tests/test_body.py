@@ -8,12 +8,14 @@ import numpy as np
 import pytest
 
 from bowlsense.config import Settings, load_settings
+from bowlsense.detect.person import PersonTrack, select_bowler
 from bowlsense.errors import InvalidInputError, PoseQualityError
 from bowlsense.geometry.angles import keypoint_track
 from bowlsense.geometry.body import (
     BowlingArmResult,
     detect_bowling_arm,
     estimate_height_px,
+    has_runup,
     joint,
     mirror_sequence,
     runup_window,
@@ -110,9 +112,20 @@ def _seq_without(name_prefix: str) -> PoseSequence:
     return seq.model_copy(update={"frames": frames})
 
 
-def test_missing_wrist_raises() -> None:
-    with pytest.raises(PoseQualityError, match="left wrist"):
-        detect_bowling_arm(_seq_without("l_wrist"))
+def test_one_hidden_wrist_picks_the_visible_arm() -> None:
+    r = detect_bowling_arm(_seq_without("l_wrist"))
+    assert r.arm == "right" and r.method == "only_visible_wrist"
+    r = detect_bowling_arm(_seq_without("r_wrist"))
+    assert r.arm == "left" and r.method == "only_visible_wrist"
+
+
+def test_no_wrists_at_all_raises() -> None:
+    seq = _seq_without("l_wrist")
+    seq = seq.model_copy(update={"frames": [
+        f.model_copy(update={"keypoints": {**f.keypoints, "r_wrist": None}}) for f in seq.frames
+    ]})  # fmt: skip
+    with pytest.raises(PoseQualityError, match="Neither wrist"):
+        detect_bowling_arm(seq)
 
 
 @pytest.mark.parametrize(
@@ -144,16 +157,19 @@ def test_height_scales_linearly(settings: Settings) -> None:
     assert b.height_px / a.height_px == pytest.approx(2.0, rel=1e-6)
 
 
-def test_height_needs_nose(settings: Settings) -> None:
-    with pytest.raises(PoseQualityError, match="nose"):
+def test_height_needs_the_head(settings: Settings) -> None:
+    with pytest.raises(PoseQualityError, match="head"):
         estimate_height_px(_seq_without("nose"), settings.body)
 
 
-def test_runup_window_too_short(settings: Settings) -> None:
-    seq = generate(SynthParams(fps=60)).sequence
+def test_clip_without_runup_measures_height_from_segments(settings: Settings) -> None:
+    """Shorts and reels start at the delivery stride: height comes from body segments."""
+    seq = generate(SynthParams(fps=60, height_px=300.0)).sequence
     late = seq.model_copy(update={"frames": seq.frames[150:]})
-    with pytest.raises(PoseQualityError, match="too close"):
-        runup_window(late, settings.body)
+    assert not has_runup(late, settings.body)
+    assert runup_window(late, settings.body) == (0, len(late.frames))
+    est = estimate_height_px(late, settings.body)
+    assert est.method == "segments" and abs(est.height_px - 300.0) / 300.0 < 0.15
 
 
 def test_mirror_twice_is_identity() -> None:
@@ -213,3 +229,24 @@ def test_height_falls_back_to_whole_clip_when_runup_is_hidden() -> None:
     fallback = estimate_height_px(seq.model_copy(update={"frames": frames}), s.body)
     assert fallback.window == (0, len(seq.frames))
     assert fallback.height_px == pytest.approx(full.height_px, rel=0.25)
+
+
+def _track(tid: int, n: int, height: float, step: float) -> PersonTrack:
+    """A track of ``n`` frames, boxes ``height`` tall, moving ``step`` px a frame."""
+    boxes = [(10 + i * step, 100.0, 60 + i * step, 100.0 + height) for i in range(n)]
+    return PersonTrack(track_id=tid, frames=list(range(n)), boxes=boxes, confs=[0.9] * n)
+
+
+def test_the_person_who_moves_most_is_the_bowler() -> None:
+    bowler = _track(1, 300, 600, 8.0)  # long, big, runs a long way
+    blip = _track(2, 15, 280, 1.0)
+    walker = _track(3, 200, 550, 1.5)
+    pick = select_bowler([blip, walker, bowler], 1280, 10, dominant_ratio=2.0)
+    assert pick.track_id == 1
+
+
+def test_tiny_distant_people_are_never_the_bowler() -> None:
+    fielder = _track(1, 120, 70, 6.0)  # far away, a tenth of the bowler's size
+    bowler = _track(2, 120, 600, 5.0)
+    pick = select_bowler([fielder, bowler], 1280, 10, min_size_frac=0.4)
+    assert pick.track_id == 2

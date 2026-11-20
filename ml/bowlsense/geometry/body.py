@@ -30,6 +30,7 @@ class HeightEstimate(BaseModel):
     height_px: float
     frames_used: list[int]
     window: tuple[int, int]
+    method: Literal["run-up", "segments"] = "run-up"
 
 
 class BowlingArmResult(BaseModel):
@@ -40,7 +41,9 @@ class BowlingArmResult(BaseModel):
     arm: Arm
     left_peak_px_s: float
     right_peak_px_s: float
-    method: Literal["wrist_speed", "elbow_at_release", "profile"] = "wrist_speed"
+    method: Literal["wrist_speed", "elbow_at_release", "profile", "only_visible_wrist"] = (
+        "wrist_speed"
+    )
     elbow_margin_px: float | None = None
 
     @property
@@ -74,17 +77,22 @@ def to_pct(distance_px: object, height_px: float) -> FloatArray:
 
 
 def _peak_wrist_speeds(seq: PoseSequence) -> tuple[float, float, int]:
-    speeds = {}
-    for side in ("l", "r"):
-        s = linear_speed(keypoint_track(seq, f"{side}_wrist"), seq.fps)
-        if not np.isfinite(s).any():
-            raise PoseQualityError(
-                f"The {'left' if side == 'l' else 'right'} wrist was never detected, so the "
-                "bowling arm can't be determined. Film with the whole body in frame."
-            )
-        speeds[side] = s
+    """Peak speed of each wrist (``NaN`` for a wrist never seen) and the frame of the
+    fastest wrist movement. Raises only when neither wrist is ever detected."""
+    speeds = {
+        side: linear_speed(keypoint_track(seq, f"{side}_wrist"), seq.fps) for side in ("l", "r")
+    }
     both = np.fmax(speeds["l"], speeds["r"])
-    return float(np.nanmax(speeds["l"])), float(np.nanmax(speeds["r"])), int(np.nanargmax(both))
+    if not np.isfinite(both).any():
+        raise PoseQualityError(
+            "Neither wrist was ever detected, so the bowling arm can't be determined. Film "
+            "with the whole body in frame."
+        )
+
+    def peak(side: str) -> float:
+        return float(np.nanmax(speeds[side])) if np.isfinite(speeds[side]).any() else float("nan")
+
+    return peak("l"), peak("r"), int(np.nanargmax(both))
 
 
 def detect_bowling_arm(seq: PoseSequence) -> BowlingArmResult:
@@ -93,10 +101,19 @@ def detect_bowling_arm(seq: PoseSequence) -> BowlingArmResult:
     Run this on a cleaned sequence (see ``pose.smoothing``); single-frame keypoint glitches
     in raw detections can create fake speed peaks.
 
+    When one wrist is never detected the visible one is taken (method
+    ``only_visible_wrist``).
+
     Raises:
-        PoseQualityError: if either wrist is never detected.
+        PoseQualityError: if neither wrist is ever detected.
     """
     left, right, _ = _peak_wrist_speeds(seq)
+    if not np.isfinite(left) or not np.isfinite(right):
+        # one wrist is never seen: it's almost always the front arm hidden behind the body,
+        # while the bowling arm swings overhead in view
+        arm: Arm = "left" if np.isfinite(left) else "right"
+        return BowlingArmResult(arm=arm, left_peak_px_s=left, right_peak_px_s=right,
+                                method="only_visible_wrist")  # fmt: skip
     return BowlingArmResult(
         arm="right" if right >= left else "left", left_peak_px_s=left, right_peak_px_s=right
     )
@@ -151,13 +168,59 @@ def runup_window(
     """
     peak = release if release is not None else _peak_wrist_speeds(seq)[2]
     stop = peak - round(settings.runup_end_before_peak_s * seq.fps)
-    min_frames = max(3, round(0.25 * seq.fps))
-    if stop < min_frames:
-        raise PoseQualityError(
-            "The clip starts too close to the delivery to measure the bowler's height. "
-            "Start recording at least a second before the bowler reaches the crease."
-        )
+    if stop < min_runup_frames(seq):  # short clip (reels, shorts): no run-up in view
+        return 0, len(seq.frames)
     return 0, stop
+
+
+def min_runup_frames(seq: PoseSequence) -> int:
+    """Fewest frames before the delivery stride that count as a usable run-up."""
+    return max(3, round(0.25 * seq.fps))
+
+
+def has_runup(seq: PoseSequence, settings: BodySettings, release: int | None = None) -> bool:
+    """True when the clip shows enough run-up before the delivery stride."""
+    peak = release if release is not None else _peak_wrist_speeds(seq)[2]
+    return peak - round(settings.runup_end_before_peak_s * seq.fps) >= min_runup_frames(seq)
+
+
+SEGMENTS = (("ankle", "knee"), ("knee", "hip"), ("hip", "shoulder"))
+
+
+def height_from_segments(seq: PoseSequence, settings: BodySettings) -> HeightEstimate:
+    """Height from body-segment lengths (shank + thigh + trunk + shoulder-to-nose), which
+    don't depend on posture, for clips without a run-up. Per frame the longer side of each
+    segment is used (the nearer one is less foreshortened); the clip's upper percentile is
+    taken, then scaled by ``segment_sum_frac`` (that chain is ~90% of standing height)."""
+    totals = []
+    for f in seq.frames:
+        k = f.keypoints
+        total = 0.0
+        ok = True
+        for a, b in SEGMENTS:
+            lens = [
+                np.hypot(k[f"{s}_{a}"].x - k[f"{s}_{b}"].x, k[f"{s}_{a}"].y - k[f"{s}_{b}"].y)  # type: ignore[union-attr]
+                for s in ("l", "r")
+                if k.get(f"{s}_{a}") is not None and k.get(f"{s}_{b}") is not None
+            ]
+            if not lens:
+                ok = False
+                break
+            total += max(lens)
+        nose = k.get("nose")
+        sh = [k[f"{s}_shoulder"] for s in ("l", "r") if k.get(f"{s}_shoulder") is not None]
+        if not ok or nose is None or not sh:
+            continue
+        total += min(np.hypot(nose.x - p.x, nose.y - p.y) for p in sh)  # type: ignore[union-attr]
+        totals.append(total)
+    if len(totals) < 3:
+        raise PoseQualityError(
+            "The bowler's legs, hips, shoulders and head are never visible together, so body "
+            "height can't be measured. Keep the bowler's full body in frame."
+        )
+    height = float(np.percentile(totals, 90)) / settings.segment_sum_frac
+    return HeightEstimate(height_px=height, frames_used=[], window=(0, len(seq.frames)),
+                          method="segments")  # fmt: skip
 
 
 def estimate_height_px(seq: PoseSequence, settings: BodySettings) -> HeightEstimate:
@@ -171,6 +234,8 @@ def estimate_height_px(seq: PoseSequence, settings: BodySettings) -> HeightEstim
         PoseQualityError: if the nose or both ankles are missing in every frame (the run-up
             is preferred; the whole clip is used when the run-up has no full-body frame).
     """
+    if not has_runup(seq, settings):
+        return height_from_segments(seq, settings)
     start, stop = runup_window(seq, settings)
 
     def vertical(lo: int, hi: int) -> FloatArray:
@@ -184,11 +249,8 @@ def estimate_height_px(seq: PoseSequence, settings: BodySettings) -> HeightEstim
         start, stop = 0, len(seq.frames)
         per_frame = vertical(start, stop)
         valid = np.flatnonzero(np.isfinite(per_frame))
-    if valid.size == 0:
-        raise PoseQualityError(
-            "The nose and ankles are never visible together during the run-up, so body "
-            "height can't be measured. Keep the bowler's full body in frame."
-        )
+    if valid.size == 0:  # never upright and fully in view: measure the body segments instead
+        return height_from_segments(seq, settings)
     k = max(1, int(np.ceil(settings.height_top_frac * valid.size)))
     top = valid[np.argsort(per_frame[valid])[-k:]]
     height = float(np.median(per_frame[top])) * settings.height_factor

@@ -26,7 +26,7 @@ from bowlsense.config import Settings
 from bowlsense.detect.ball import YoloBallDetector, track_ball
 from bowlsense.detect.person import select_bowler, track_people_in_video
 from bowlsense.detect.selector import load_selector
-from bowlsense.errors import BowlSenseError, InvalidInputError
+from bowlsense.errors import BowlSenseError, InvalidInputError, PhaseDetectionError
 from bowlsense.geometry.angles import FloatArray, keypoint_track
 from bowlsense.geometry.body import (
     BowlingArmResult,
@@ -176,6 +176,8 @@ def extract_pose(
         bowler = select_bowler(
             tracks, info.width, settings.detect.min_track_frames, bowler_track_id,
             scorer=scorer, frame_height=info.height, n_frames=info.frame_count,
+            min_size_frac=settings.detect.min_size_frac,
+            dominant_ratio=settings.detect.dominant_mover_ratio,
         )  # fmt: skip
         track_id, used_backend = bowler.track_id, name
         if people_out is not None:
@@ -229,7 +231,17 @@ def extract_pose(
     arm_result = choose_bowling_arm(cleaned, settings, bowling_arm)
     arm = arm_result.arm
     cleaned = cleaned.model_copy(update={"bowling_arm": arm})
-    first_release = find_releases(cleaned, settings.clipping)[0]
+    try:
+        first_release = find_releases(cleaned, settings.clipping)[0]
+    except PhaseDetectionError:
+        if bowling_arm is not None:  # the profile's arm: trust it
+            raise
+        other: Arm = "left" if arm == "right" else "right"
+        flipped = cleaned.model_copy(update={"bowling_arm": other})
+        first_release = find_releases(flipped, settings.clipping)[0]  # raises if neither arm
+        log.info("bowling arm switched to %s: the %s wrist never rose above the shoulder",
+                 other, arm)  # fmt: skip
+        arm, cleaned = other, flipped
     window = runup_window(cleaned, settings.body, release=first_release)
     view = camera_view or estimate_view(cleaned, window, settings.video)
     warnings += check_pose(seq, _visible_frames(seq), settings.video)
