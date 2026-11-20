@@ -16,7 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 from bowlsense.config import load_settings
-from bowlsense.errors import BowlSenseError, ConfigError
+from bowlsense.errors import BowlSenseError, CalibrationError, ConfigError
+from bowlsense.geometry.pitch import PitchCalibration, calibrate
 from bowlsense.pipeline import analyze_session, extract_pose
 from bowlsense.pose.smoothing import clean_sequence
 from bowlsense.render.clipping import sub_sequence
@@ -37,13 +38,36 @@ def _parser() -> argparse.ArgumentParser:
     a.add_argument("--backend", choices=["rtm", "mediapipe"], help="pose backend (default: config)")
     a.add_argument("--bowler-track-id", type=int, help="use this tracked person as the bowler")
     a.add_argument(
+        "--bowling-arm", choices=["right", "left"], help="the bowler's arm (skips detection)"
+    )
+    a.add_argument(
         "--pose-from-json",
         type=Path,
         help="use keypoints from a saved PoseSequence JSON instead of the pose model",
     )
+    a.add_argument(
+        "--calib",
+        type=Path,
+        help='pitch calibration JSON: {"points": [[x, y] x 4]} (crease corners) for ball '
+        "speed, length and line",
+    )
     a.add_argument("--config", type=Path, help="config YAML (default: config/default.yaml)")
     a.add_argument("-v", "--verbose", action="store_true", help="log progress")
     return parser
+
+
+def load_calibration(path: Path) -> PitchCalibration:
+    """Read ``{"points": [[x, y], ...]}`` and solve the pitch calibration."""
+    if not path.is_file():
+        raise CalibrationError(f"Calibration file not found: {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        points = data["points"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CalibrationError(
+            f'{path.name} must be JSON like {{"points": [[x, y], ...]}}'
+        ) from exc
+    return calibrate(points)
 
 
 def analyze(args: argparse.Namespace) -> int:
@@ -56,8 +80,10 @@ def analyze(args: argparse.Namespace) -> int:
         allow_low_fps=args.allow_low_fps,
         bowler_track_id=args.bowler_track_id,
         pose_json=args.pose_from_json,
+        bowling_arm=args.bowling_arm,
     )
-    session = analyze_session(front, settings)
+    calibration = load_calibration(args.calib) if args.calib else None
+    session = analyze_session(front, settings, calibration=calibration)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
     (out / "pose.json").write_text(front.sequence.model_dump_json(), encoding="utf-8")

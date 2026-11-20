@@ -1,0 +1,19 @@
+{
+  "feature_version": 1,
+  "network": {
+    "hidden": 64,
+    "layers": 2,
+    "dropout": 0.2
+  },
+  "fps_trained": 30.0,
+  "test_metrics": {
+    "n": 255,
+    "within_1": 0.7529411764705882,
+    "within_2": 0.8588235294117647,
+    "within_3": 0.9176470588235294,
+    "within_5": 0.9647058823529412,
+    "mae_frames": 1.2823529411764707,
+    "mae_ms": 42.74509803921569,
+    "no_answer": 0.0
+  }
+}

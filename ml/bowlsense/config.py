@@ -113,6 +113,7 @@ class PhaseSettings(_Section):
     """Phase detection options."""
 
     use_model: bool
+    model_file: str = Field(min_length=1)
     release_refine_frames: int = Field(ge=0)
     ffc_window_s: float = Field(gt=0)
     bfc_window_s: float = Field(gt=0)
@@ -292,6 +293,39 @@ class DeliverySettings(_Section):
     """Ball and delivery analysis."""
 
     length_zones_m: LengthZones
+    type_model_file: str = Field(min_length=1)
+    speed_frames: tuple[int, int]
+    first_ball_within_frames: int = Field(ge=0)
+    line_bands_m: dict[str, float]
+    batter_hand: Literal["right", "left"]
+    position_error_px: float = Field(gt=0)
+    max_length_error_m: float = Field(gt=0)
+    max_line_error_m: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> DeliverySettings:
+        lo, hi = self.speed_frames
+        if not 2 <= lo <= hi:
+            raise ValueError("delivery.speed_frames must be [min, max] with 2 <= min <= max")
+        if set(self.line_bands_m) != {"middle", "stump", "wide"}:
+            raise ValueError("delivery.line_bands_m needs exactly middle, stump, wide")
+        b = self.line_bands_m
+        if not 0 < b["middle"] < b["stump"] < b["wide"]:
+            raise ValueError("delivery.line_bands_m must satisfy 0 < middle < stump < wide")
+        return self
+
+
+class BallSettings(_Section):
+    """Ball detection and tracking."""
+
+    yolo_class: int = Field(ge=0)
+    det_conf: float = Field(gt=0, lt=1)
+    roi_px: int = Field(ge=64)
+    max_missed: int = Field(ge=0)
+    gate_px: float = Field(gt=0)
+    meas_noise_px: float = Field(gt=0)
+    accel_noise_px_s2: float = Field(gt=0)
+    track_after_release_s: float = Field(gt=0)
 
 
 class JobSettings(_Section):
@@ -447,6 +481,7 @@ class Settings(_Section):
     fatigue: FatigueSettings
     workload: WorkloadSettings
     delivery: DeliverySettings
+    ball: BallSettings
     jobs: JobSettings
     api: ApiSettings
     render: RenderSettings

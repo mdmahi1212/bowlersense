@@ -206,12 +206,16 @@ def detect_phases(
     height_px: float,
     settings: PhaseSettings,
     raw: PoseSequence | None = None,
+    release: int | None = None,
 ) -> PhaseEvents:
     """Detect delivery events in a cleaned sequence.
 
     ``raw`` is the same clip gated and gap-filled but *not* smoothed
     (``clean_sequence(..., smooth=False)``). When given, foot-strike frames are pinned on
     it, which is more accurate; without it the smoothed track is used.
+
+    ``release`` overrides the rule-based release (e.g. from the learned phase model); every
+    other event is then found relative to it.
 
     Raises:
         InvalidInputError: if the sequence is empty or ``height_px`` is not positive.
@@ -233,7 +237,10 @@ def detect_phases(
         track("bowling", "elbow"),
         track("bowling", "wrist"),
     )
-    release = find_release(wrist, shoulder, fps, settings.release_refine_frames)
+    if release is None:
+        release = find_release(wrist, shoulder, fps, settings.release_refine_frames)
+    elif not 0 <= release < n:
+        raise InvalidInputError(f"release {release} is outside the {n}-frame sequence.")
 
     arm_h = find_arm_horizontal(shoulder, elbow, release)
     if arm_h is None:

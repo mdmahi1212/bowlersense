@@ -40,6 +40,8 @@ class BowlingArmResult(BaseModel):
     arm: Arm
     left_peak_px_s: float
     right_peak_px_s: float
+    method: Literal["wrist_speed", "elbow_at_release", "profile"] = "wrist_speed"
+    elbow_margin_px: float | None = None
 
     @property
     def ratio(self) -> float:
@@ -98,6 +100,39 @@ def detect_bowling_arm(seq: PoseSequence) -> BowlingArmResult:
     return BowlingArmResult(
         arm="right" if right >= left else "left", left_peak_px_s=left, right_peak_px_s=right
     )
+
+
+def elbow_lift(seq: PoseSequence, arm: Arm, release: int, half_window: int = 2) -> float:
+    """How much higher (pixels) the ``arm`` elbow is than the other elbow around ``release``.
+
+    At release the bowling elbow is above the shoulder and the front elbow is down by the
+    hip. Elbows blur far less than wrists at release, so this is robust at 30 fps.
+    """
+    sl = slice(max(0, release - half_window), release + half_window + 1)
+    mine = keypoint_track(seq, joint(arm, "bowling", "elbow"))[sl, 1]
+    other = keypoint_track(seq, joint(arm, "non_bowling", "elbow"))[sl, 1]
+    diff = other - mine  # image y grows downward
+    return float(np.nanmean(diff)) if np.isfinite(diff).any() else float("nan")
+
+
+def detect_bowling_arm_at_release(
+    seq: PoseSequence, release: int | None = None
+) -> BowlingArmResult:
+    """Bowling arm from elbow height at release (more robust on real footage than wrist
+    speed, because elbows blur far less than wrists at release).
+
+    Both elbows are compared at ONE release frame: ``release`` if given (e.g. from the
+    learned phase model), otherwise the moment of fastest wrist movement. Falls back to peak
+    wrist speed when the elbows aren't visible there.
+    """
+    speed = detect_bowling_arm(seq)
+    frame = release if release is not None else _peak_wrist_speeds(seq)[2]
+    margin = elbow_lift(seq, "right", frame)
+    if not np.isfinite(margin):
+        return speed
+    arm: Arm = "right" if margin >= 0 else "left"
+    return speed.model_copy(update={"arm": arm, "method": "elbow_at_release",
+                                    "elbow_margin_px": abs(margin)})  # fmt: skip
 
 
 def with_bowling_arm(seq: PoseSequence) -> PoseSequence:

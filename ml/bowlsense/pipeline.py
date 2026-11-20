@@ -9,26 +9,43 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from bowlsense.analysis.alignment import assess_alignment
+from bowlsense.analysis.delivery import assess_ball
 from bowlsense.analysis.fatigue import assess_fatigue, delivery_fatigue_input
 from bowlsense.analysis.faults import assess_faults
 from bowlsense.analysis.injury import assess_injury, injury_features
 from bowlsense.analysis.legality import assess_legality
 from bowlsense.config import Settings
+from bowlsense.detect.ball import YoloBallDetector, track_ball
 from bowlsense.detect.person import select_bowler, track_people_in_video
 from bowlsense.errors import InvalidInputError
-from bowlsense.geometry.body import detect_bowling_arm, estimate_height_px, runup_window
+from bowlsense.geometry.angles import keypoint_track
+from bowlsense.geometry.body import (
+    BowlingArmResult,
+    detect_bowling_arm,
+    detect_bowling_arm_at_release,
+    estimate_height_px,
+    joint,
+    runup_window,
+)
+from bowlsense.geometry.pitch import PitchCalibration
 from bowlsense.io.quality import check_pose, check_video, estimate_view
 from bowlsense.io.video import VideoInfo, iter_frames, probe_video
 from bowlsense.phases.heuristic import detect_phases
+from bowlsense.phases.model import load_phase_model
+from bowlsense.phases.seqclf import load_classifier
 from bowlsense.pose.base import load_backend
 from bowlsense.pose.smoothing import clean_sequence
 from bowlsense.render.clipping import ClipWindow, clip_windows, find_releases, sub_sequence
 from bowlsense.schemas import (
     KEYPOINT_NAMES,
+    Arm,
+    BallTrack,
     DeliveryAnalysis,
+    DeliveryTypeResult,
     FatigueResult,
     FramePose,
     PoseSequence,
@@ -70,6 +87,29 @@ def _pose_from_json(path: Path, info: VideoInfo) -> PoseSequence:
     return seq
 
 
+def choose_bowling_arm(
+    seq: PoseSequence, settings: Settings, known: Arm | None = None
+) -> BowlingArmResult:
+    """The bowling arm: the bowler profile's if known; else the elbow raised at release
+    (release from the learned phase model, when enabled); else peak wrist speed.
+
+    On real 30 fps match footage the elbow-at-learned-release rule was right 84.5% of the
+    time (94% on the held-out test videos) against 59% for peak wrist speed.
+    """
+    if known is not None:
+        return BowlingArmResult(arm=known, left_peak_px_s=float("nan"),
+                                right_peak_px_s=float("nan"), method="profile")  # fmt: skip
+    weights = settings.storage.models_path / settings.phases.model_file
+    if settings.phases.use_model and weights.is_file():
+        model = load_phase_model(weights)
+        best = max(
+            (model.predict(seq.model_copy(update={"bowling_arm": a})) for a in ("right", "left")),
+            key=lambda p: p.release_confidence,
+        )
+        return detect_bowling_arm_at_release(seq, best.release)
+    return detect_bowling_arm(seq)
+
+
 def extract_pose(
     video: Path,
     settings: Settings,
@@ -78,11 +118,13 @@ def extract_pose(
     allow_low_fps: bool = False,
     bowler_track_id: int | None = None,
     pose_json: Path | None = None,
+    bowling_arm: Arm | None = None,
 ) -> FrontEndResult:
     """Video -> the bowler's pose sequence with view and bowling arm set.
 
     With ``pose_json`` the keypoints come from that file (a saved ``PoseSequence``) instead
-    of the detector and pose model; the video is still checked.
+    of the detector and pose model; the video is still checked. ``bowling_arm`` (from the
+    bowler's profile) skips arm detection.
     """
     info = probe_video(video)
     warnings = check_video(info, settings.video, allow_low_fps)
@@ -110,13 +152,15 @@ def extract_pose(
         seq = PoseSequence(fps=info.fps, width=info.width, height=info.height, frames=frames)
 
     cleaned = clean_sequence(seq, settings.pose)
-    arm = detect_bowling_arm(cleaned).arm
+    arm_result = choose_bowling_arm(cleaned, settings, bowling_arm)
+    arm = arm_result.arm
     cleaned = cleaned.model_copy(update={"bowling_arm": arm})
     first_release = find_releases(cleaned, settings.clipping)[0]
     window = runup_window(cleaned, settings.body, release=first_release)
     view = estimate_view(cleaned, window, settings.video)
     warnings += check_pose(seq, _visible_frames(seq), settings.video)
-    log.info("front end: %s arm, %s view, %d warning(s)", arm, view, len(warnings))
+    log.info("front end: %s arm (%s), %s view, %d warning(s)", arm, arm_result.method, view,
+             len(warnings))  # fmt: skip
     return FrontEndResult(
         video=info,
         sequence=seq.model_copy(update={"bowling_arm": arm, "view": view}),
@@ -124,6 +168,22 @@ def extract_pose(
         bowler_track_id=track_id,
         backend=used_backend,
     )
+
+
+def classify_delivery_type(
+    seq: PoseSequence, release: int, weights: Path
+) -> DeliveryTypeResult | None:
+    """Pace or spin from the learned sequence classifier (2.5 s before to 0.5 s after
+    release); ``None`` when no trained model is present."""
+    if not weights.is_file():
+        return None
+    fps = seq.fps
+    a, z = max(0, release - round(2.5 * fps)), min(len(seq.frames), release + round(0.5 * fps) + 1)
+    probs = load_classifier(weights).predict_proba(
+        seq.model_copy(update={"frames": seq.frames[a:z]})
+    )
+    p_fast = probs.get("fast", 0.0)
+    return DeliveryTypeResult(delivery_type="fast" if p_fast >= 0.5 else "spin", p_fast=p_fast)
 
 
 def analyze_delivery(
@@ -138,7 +198,13 @@ def analyze_delivery(
     seq = clean_sequence(raw, settings.pose)
     unsmoothed = clean_sequence(raw, settings.pose, smooth=False)
     height = estimate_height_px(seq, settings.body).height_px
-    phases = detect_phases(seq, height, settings.phases, raw=unsmoothed)
+    models = settings.storage.models_path
+    learned_release: int | None = None
+    if settings.phases.use_model:
+        learned_release = load_phase_model(models / settings.phases.model_file).predict(seq).release
+    phases = detect_phases(seq, height, settings.phases, raw=unsmoothed, release=learned_release)
+    type_file = models / settings.delivery.type_model_file
+    delivery_type = classify_delivery_type(seq, phases.release, type_file)
     legality = assess_legality(
         seq, phases, settings.legality, raw=unsmoothed, popping_crease=popping_crease
     )
@@ -153,6 +219,8 @@ def analyze_delivery(
         faults=faults,
         injury=assess_injury(features, settings.injury),
         fatigue_input=delivery_fatigue_input(delivery_idx, seq, phases, height, faults, settings),
+        delivery_type=delivery_type,
+        release_source="model" if learned_release is not None else "rules",
     )
 
 
@@ -164,12 +232,39 @@ class SessionAnalysis(BaseModel):
     fatigue: FatigueResult
 
 
+def _with_ball(
+    front: FrontEndResult,
+    cleaned: PoseSequence,
+    window: ClipWindow,
+    delivery: DeliveryAnalysis,
+    detector: YoloBallDetector,
+    calibration: PitchCalibration | None,
+    settings: Settings,
+) -> DeliveryAnalysis:
+    """Track the ball from this delivery's release and add module F's metrics."""
+    release = window.start + delivery.phases.release
+    wrist = keypoint_track(cleaned, joint(cleaned.bowling_arm, "bowling", "wrist"))[release]
+    if not np.isfinite(wrist).all():
+        track = BallTrack(points=[])
+    else:
+        frames = iter_frames(Path(front.video.path), max(0, release - 1))
+        track = track_ball(
+            frames, detector, release, (float(wrist[0]), float(wrist[1])), front.video.fps,
+            settings.ball, settings.delivery.first_ball_within_frames,
+        )  # fmt: skip
+    ball = assess_ball(track, calibration, front.video.fps, settings.delivery)
+    return delivery.model_copy(update={"ball": ball, "ball_track": track})
+
+
 def analyze_session(
     front: FrontEndResult,
     settings: Settings,
     popping_crease: Sequence[Point] | None = None,
+    calibration: PitchCalibration | None = None,
+    track_ball_flight: bool = True,
 ) -> SessionAnalysis:
-    """Split the video into deliveries around each release and analyse each one."""
+    """Split the video into deliveries around each release and analyse each one (modules
+    A-E), then track the ball from each release (module F)."""
     raw = front.sequence
     cleaned = clean_sequence(raw, settings.pose)
     releases = find_releases(cleaned, settings.clipping)
@@ -181,5 +276,11 @@ def analyze_session(
         )
         for i, w in enumerate(windows)
     ]
+    if track_ball_flight:
+        detector = YoloBallDetector(settings.storage.models_path, settings.detect, settings.ball)
+        deliveries = [
+            _with_ball(front, cleaned, w, d, detector, calibration, settings)
+            for w, d in zip(windows, deliveries, strict=True)
+        ]
     fatigue = assess_fatigue([d.fatigue_input for d in deliveries], settings.fatigue)
     return SessionAnalysis(windows=windows, deliveries=deliveries, fatigue=fatigue)

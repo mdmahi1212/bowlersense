@@ -111,6 +111,19 @@ def values_in(values: FloatArray, lo: int, hi: int) -> FloatArray:
     return seg[np.isfinite(seg)]
 
 
+def _ball_text(a: DeliveryAnalysis) -> str:
+    """Speed / length / line, or why they're missing."""
+    if a.ball is None:
+        return "not tracked"
+    parts = []
+    if a.ball.speed_kmh is not None:
+        parts.append(f"{a.ball.speed_kmh:.0f} km/h")
+    parts += [p for p in (a.ball.length, a.ball.line) if p]
+    if a.delivery_type is not None:
+        parts.append(a.delivery_type.delivery_type)
+    return ", ".join(parts) if parts else "; ".join(a.ball.notes) or "n/a"
+
+
 def _injury_rows(risk: InjuryRisk) -> list[list[str]]:
     rows = [["Component", "Score", "Weight", "Drivers"]]
     for c in risk.components:
@@ -167,7 +180,7 @@ def build_report(data: ReportInput, path: Path, chart_dir: Path, threshold_deg: 
         ),
         Spacer(1, 4 * mm),
     ]
-    summary = [["Delivery", "Technique score", "Injury risk", "Legality (elbow)", "Action"]]
+    summary = [["Delivery", "Technique score", "Injury risk", "Legality (elbow)", "Action", "Ball"]]
     for d in data.deliveries:
         a = d.analysis
         leg = a.legality
@@ -180,6 +193,7 @@ def build_report(data: ReportInput, path: Path, chart_dir: Path, threshold_deg: 
                 f"({'FLAGGED' if leg.flagged else 'within'} {leg.threshold_deg:.0f} deg; "
                 f"{leg.confidence} confidence)",
                 a.alignment.action_type.replace("_", " "),
+                _ball_text(a),
             ]
         )
     story += [Paragraph("Summary", styles["Heading2"]), table(summary)]

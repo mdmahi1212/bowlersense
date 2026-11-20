@@ -4,6 +4,7 @@ black==26.10.1
 click==8.5.1
 coverage==7.17.3
 iniconfig==2.3.1
+joblib==1.6.0
 librt==0.16.0
 mypy-extensions==1.2.0
 mypy==2.4.1
@@ -19,5 +20,7 @@ pytest-cov==7.1.0
 pytest==9.2.0
 pytokens==0.4.1
 ruff==0.17.5
+scikit-learn==1.9.1
 scipy-stubs==1.17.1.5
+threadpoolctl==3.8.0
 types-pyyaml==6.0.12.20261113

@@ -26,7 +26,7 @@ target-version = ["py311"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["bowlsense", "synth", "tests"]
+files = ["bowlsense", "synth", "train", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -34,6 +34,6 @@ addopts = "-q"
 
 [[tool.mypy.overrides]]
 # Third-party packages without type information; our own code stays strict.
-module = ["rtmlib", "rtmlib.*", "onnxruntime", "onnxruntime.*", "mediapipe", "mediapipe.*", "ultralytics", "ultralytics.*", "imageio_ffmpeg", "reportlab", "reportlab.*"]
+module = ["rtmlib", "rtmlib.*", "onnxruntime", "onnxruntime.*", "mediapipe", "mediapipe.*", "ultralytics", "ultralytics.*", "imageio_ffmpeg", "reportlab", "reportlab.*", "sklearn", "sklearn.*"]
 ignore_missing_imports = true
 follow_imports = "skip"

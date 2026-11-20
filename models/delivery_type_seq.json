@@ -1,0 +1,21 @@
+{
+  "feature_version": 1,
+  "classes": [
+    "spin",
+    "fast"
+  ],
+  "layout": "role",
+  "network": {
+    "hidden": 48,
+    "dropout": 0.3
+  },
+  "test_metrics": {
+    "accuracy": 0.6309523809523809,
+    "balanced_accuracy": 0.6264957264957265,
+    "recall": {
+      "spin": 0.5641025641025641,
+      "fast": 0.6888888888888889
+    },
+    "n": 84
+  }
+}

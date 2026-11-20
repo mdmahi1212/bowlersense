@@ -25,6 +25,11 @@ data/storage/outputs/*
 !data/storage/outputs/.gitkeep
 models/*
 !models/.gitkeep
+# Small models trained on the bowling dataset (train/), kept so a fresh clone works
+!models/phase_model.pt
+!models/phase_model.json
+!models/delivery_type_seq.pt
+!models/delivery_type_seq.json
 out/
 results/
 ml/tests/data/real/*
@@ -39,3 +44,6 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
+
+# Training data extracted from the dataset (large, reproducible)
+data/training/

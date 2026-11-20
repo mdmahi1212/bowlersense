@@ -268,6 +268,24 @@ class AlignmentResult(_Model):
     notes: list[str] = Field(default_factory=list)
 
 
+class BallMetrics(_Model):
+    """Module F: speed, length, line and pitch position (``None`` = not measurable, see
+    ``notes``)."""
+
+    speed_kmh: float | None
+    length: str | None
+    line: str | None
+    pitch_xy: tuple[float, float] | None
+    notes: list[str]
+
+
+class DeliveryTypeResult(_Model):
+    """Pace or spin (learned classifier), with the probability of pace."""
+
+    delivery_type: Literal["fast", "spin"]
+    p_fast: float = Field(ge=0, le=1)
+
+
 class DeliveryAnalysis(_Model):
     """Modules A-D (and E's per-delivery inputs) for one delivery."""
 
@@ -278,6 +296,10 @@ class DeliveryAnalysis(_Model):
     faults: FaultReport
     injury: InjuryRisk
     fatigue_input: FatigueInput
+    delivery_type: DeliveryTypeResult | None = None
+    release_source: Literal["rules", "model"] = "rules"
+    ball: BallMetrics | None = None
+    ball_track: BallTrack | None = None
 
 
 class DeliveryMetrics(_Model):
@@ -364,6 +386,7 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     PoseSequence,
     PhaseEvents,
     BallTrack,
+    BallMetrics,
     AngleSeries,
     Fault,
     FaultReport,
@@ -372,6 +395,7 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     InjuryFeatures,
     LegalityResult,
     AlignmentResult,
+    DeliveryTypeResult,
     DeliveryAnalysis,
     DeliveryMetrics,
     FatigueInput,

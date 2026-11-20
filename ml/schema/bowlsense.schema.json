@@ -146,6 +146,82 @@
       "title": "AngleSeries",
       "type": "object"
     },
+    "BallMetrics": {
+      "additionalProperties": false,
+      "description": "Module F: speed, length, line and pitch position (``None`` = not measurable, see\n``notes``).",
+      "properties": {
+        "speed_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Speed Kmh"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Length"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Line"
+        },
+        "pitch_xy": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pitch Xy"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "speed_kmh",
+        "length",
+        "line",
+        "pitch_xy",
+        "notes"
+      ],
+      "title": "BallMetrics",
+      "type": "object"
+    },
     "BallTrack": {
       "additionalProperties": false,
       "description": "Ball positions over time: (frame, x, y, conf).",
@@ -202,6 +278,87 @@
         "points"
       ],
       "title": "BallTrack",
+      "type": "object"
+    },
+    "DeliveryAnalysis": {
+      "additionalProperties": false,
+      "description": "Modules A-D (and E's per-delivery inputs) for one delivery.",
+      "properties": {
+        "height_px": {
+          "title": "Height Px",
+          "type": "number"
+        },
+        "phases": {
+          "$ref": "#/$defs/PhaseEvents"
+        },
+        "legality": {
+          "$ref": "#/$defs/LegalityResult"
+        },
+        "alignment": {
+          "$ref": "#/$defs/AlignmentResult"
+        },
+        "faults": {
+          "$ref": "#/$defs/FaultReport"
+        },
+        "injury": {
+          "$ref": "#/$defs/InjuryRisk"
+        },
+        "fatigue_input": {
+          "$ref": "#/$defs/FatigueInput"
+        },
+        "delivery_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeliveryTypeResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "release_source": {
+          "default": "rules",
+          "enum": [
+            "rules",
+            "model"
+          ],
+          "title": "Release Source",
+          "type": "string"
+        },
+        "ball": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BallMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ball_track": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BallTrack"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "height_px",
+        "phases",
+        "legality",
+        "alignment",
+        "faults",
+        "injury",
+        "fatigue_input"
+      ],
+      "title": "DeliveryAnalysis",
       "type": "object"
     },
     "DeliveryMetrics": {
@@ -326,6 +483,32 @@
         "angles"
       ],
       "title": "DeliveryMetrics",
+      "type": "object"
+    },
+    "DeliveryTypeResult": {
+      "additionalProperties": false,
+      "description": "Pace or spin (learned classifier), with the probability of pace.",
+      "properties": {
+        "delivery_type": {
+          "enum": [
+            "fast",
+            "spin"
+          ],
+          "title": "Delivery Type",
+          "type": "string"
+        },
+        "p_fast": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "P Fast",
+          "type": "number"
+        }
+      },
+      "required": [
+        "delivery_type",
+        "p_fast"
+      ],
+      "title": "DeliveryTypeResult",
       "type": "object"
     },
     "FatigueDrift": {

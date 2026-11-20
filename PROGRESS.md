@@ -1,5 +1,41 @@
 # BowlSense — Progress
 
+## Training on the real bowling dataset ✅ (2026-11-20)
+
+**Dataset** (`C:\dev\dataset`, outside the repo; set `--dataset` or `BOWLSENSE_DATASET`): 40 club-cricket videos, 1280×720 at 30 fps, ~4.4 h. Split: 18 train / 8 test / 14 unlabelled challenge. Labels: **279 single-frame ball releases** (each preceded by an "is bowling" span), pace/spin, bowler hand, over/around the wicket; per-frame person boxes with roles; camera direction. Please confirm the dataset's licence allows use in your project.
+
+**Pipeline** (`ml/train/`): `extract_poses` runs RTMPose on the dataset's own bowler boxes around every delivery (videos decoded sequentially, not by seeking, so frame indices match the labels exactly; run with the network blocked). Then `train_release`, `train_classifiers`, `train_delivery_type` (hand-crafted baseline) and `evaluate_pipeline`. Validation always holds out whole videos; the test split is used once. Reports go to `data/training/reports/`.
+
+**Results on the held-out test split**
+| task | trained model | baseline |
+|---|---|---|
+| Release frame (255 fixed 3 s crops; the release is randomly placed so the model can't learn the window shape) | **75% within ±1 frame, 86% ±2, 92% ±3, MAE 1.28 frames (43 ms)** | rule-based detector: 48% / 52% / 54%, MAE 4.87 frames |
+| Bowling arm | **elbow height at the learned release: 94% (84.5% over all 278)**; synthetic gate 48/48 | spec's peak-wrist-speed rule: 59–62% |
+| Pace vs spin (end to end: learned arm → learned release → classifier) | **BiGRU: 63.1% accuracy, 62.6% balanced** | majority 46.4% / 50%; hand-crafted logistic regression 47.6% (no better than the baseline, kept only as the report's baseline) |
+| Camera view (existing rules) | 93% (front/behind 253/258; side 7/21, rare) | — |
+
+**What this changed in BowlSense**
+- `phases/model.py` (BiLSTM, release + per-frame phase heads) and `phases/seqclf.py` (BiGRU + attention) are used only when enabled / present. `phases.use_model: true` → release from the model, other events by rules around it (`release_source` records which).
+- **Bowling arm**: the bowler profile / `--bowling-arm` wins; else elbow-at-learned-release (when the phase model is on); else the spec's wrist-speed rule. Why: on real 30 fps footage the wrist-speed rule fails (front/behind views hide the arm's swing; the front arm also goes high at the bound), and the wrist is a motion-blurred streak at release, while the elbow is reliable.
+- Pace/spin is attached to each delivery when `models/delivery_type_seq.pt` exists.
+- The trained weights (~840 KB) are committed (whitelisted in `.gitignore`), so a fresh clone works without the dataset.
+
+**Tried and dropped (don't retry)**: a learned arm classifier with mirror augmentation (no better than chance on left-armers: 28 left-arm deliveries from only 3 bowlers); whole-window wrist-height rules (70%); comparing each arm "at its own release" (the front arm's own peak is at the bound; 0/24 synthetic).
+
+**Known limits**: left-armers are underrepresented (3 bowlers), so arm accuracy for them is uncertain; pace/spin from distant 30 fps pose alone is modest. Default `phases.use_model` stays `false` as the spec says; **set it to `true` for real footage**.
+
+## Phase 9: Module F (ball, calibration, speed, length, line) ✅ (2026-11-20)
+
+**Done**
+- `geometry/pitch.py`: 4 clicked popping-crease corners → homography to pitch metres (17.68 m between popping creases), with validation (count, repeated or collinear points, degenerate fit). **Airborne-ball fix**: a ground homography is wrong for a ball ~2 m up, so speed is measured in the vertical plane along the pitch centre line (`along_pitch`: the centre-line point at the same image column). This needs a side-on camera; otherwise speed is `None` with a reason. Auto-detecting crease lines (the spec's "or") isn't implemented; manual 4-point calibration is.
+- `detect/ball.py`: YOLO "sports ball" (conf 0.1) in a 480 px window that follows the prediction, starting at the bowling hand at release. Kalman filter: constant velocity + constant vertical acceleration; gating; bridges ≤ 4 misses, never ends on a guess. **Bounce = the strongest down→up reversal of fitted image-y slopes** (a single-frame local max was fooled by 0.3 px noise).
+- `analysis/delivery.py`: speed = slope of along-pitch distance over the first 5–10 detections × 3.6. Pitch position at the bounce (on the ground, so the homography is valid) → length zones (from the batter's stumps) and line bands (off side = bowler's left for a right-handed batter; configurable). **Length and line are reported only when the camera angle resolves them**: the homography's local derivatives give metres per pixel at the bounce. A low side-on camera sees the ground at a grazing angle (≈0.4 m sideways per px), so line is withheld there, and length from behind. Each withheld value comes with a note.
+- Pipeline + CLI: `--calib calib.json` (`{"points": [[x, y] x 4]}`), `--bowling-arm`; ball metrics and track in `DeliveryAnalysis`; the PDF summary shows speed / length / line / pace-spin or why they're missing.
+
+**Gate**: a synthetic 3D ball flight seen through a pinhole camera (perspective, airborne, gravity, bounce; 0.5 px noise; every 5th detection missing) gives speed **within ±5% in all 12 cases** (90/120/145 km/h × 120/240 fps × side-on and 11°-off cameras). No calibration → `None`; camera behind the bowler → `None` with a note. 35 tests.
+
+**Not verified on real footage**: the dataset has no ball labels, so ball detection quality on real video is unmeasured.
+
 ## Phase 8: Rendering (overlay, keyframes, clipping, PDF) ✅ (2026-11-20)
 
 **Installed**: imageio-ffmpeg 0.8.1 (bundles ffmpeg 9.0.2 with libx264, inside the venv; no system install), reportlab 5.1.0; dev: pypdf 7.1.1 (tests open and read the PDFs).
@@ -190,4 +226,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 9: module F (ball detection + Kalman tracking, pitch calibration/homography, ball speed, length/line, pitch map). Gate: synthetic ball with known speed recovered within ±5%; `None` without calibration.
+**Next**: Phase 10: module G (DTW comparison against synthetic reference actions, consistency score, bowler ID with the insufficient-data path).
