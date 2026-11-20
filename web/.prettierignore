@@ -1,0 +1,8 @@
+.next
+node_modules
+lib/types.ts
+lib/bowlsense.api.schema.json
+playwright-report
+test-results
+next-env.d.ts
+AGENTS.md

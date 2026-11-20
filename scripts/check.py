@@ -1,4 +1,5 @@
-"""Cross-platform `make check`: local-only URL check, ruff, black, mypy, pytest, web checks.
+"""Cross-platform `make check`: local-only URL check, ruff, black, mypy, pytest, web checks
+(lint + format, build, Vitest, Playwright smoke test).
 
 Run from anywhere: ``ml/.venv/Scripts/python scripts/check.py`` (Windows) or
 ``ml/.venv/bin/python scripts/check.py`` (Linux/macOS). Exits non-zero on the first failure.
@@ -48,6 +49,7 @@ def main() -> None:
         run("web lint", [npm, "run", "lint"], WEB_DIR)
         run("web build", [npm, "run", "build"], WEB_DIR)
         run("web test", [npm, "test"], WEB_DIR)
+        run("web e2e (Playwright)", [npm, "run", "test:e2e"], WEB_DIR)
     print("\nAll checks passed.")
 
 

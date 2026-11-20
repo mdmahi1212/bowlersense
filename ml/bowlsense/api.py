@@ -102,6 +102,22 @@ class ConfirmIn(BaseModel):
     confirm: str
 
 
+class DeliveryOut(BaseModel):
+    """One delivery with what the detail page needs from its session."""
+
+    delivery_id: str
+    session_id: str
+    fps: float
+    width: int
+    height: int
+    bowling_arm: Literal["right", "left"]
+    view: str
+    overlay: str  # storage path of the session's overlay video
+    pose: str  # storage path of the session's pose.json
+    delivery_count: int
+    delivery: DeliveryMetrics
+
+
 class ReferencesOut(BaseModel):
     """Reference actions for the compare page."""
 
@@ -466,13 +482,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- deliveries / files ---------------------------------------------------------------
 
     @app.get("/deliveries/{delivery_id}")
-    def get_delivery(delivery_id: str) -> DeliveryMetrics:
-        """Full metrics of one delivery."""
+    def get_delivery(delivery_id: str) -> DeliveryOut:
+        """Full metrics of one delivery, plus its session's video facts."""
         ref = state.repo.get_delivery(delivery_id)
         result = state.result(ref.session_id)
         if result is None or ref.idx >= len(result.deliveries):
             raise HTTPException(404, "The delivery's results are missing.")
-        return result.deliveries[ref.idx]
+        return DeliveryOut(
+            delivery_id=delivery_id, session_id=ref.session_id, fps=result.fps,
+            width=result.width, height=result.height, bowling_arm=result.bowling_arm,
+            view=result.view, overlay=result.artifacts["overlay"], pose=result.artifacts["pose"],
+            delivery_count=len(result.deliveries), delivery=result.deliveries[ref.idx],
+        )  # fmt: skip
 
     @app.get("/sessions/{session_id}/video")
     def session_video(session_id: str) -> FileResponse:
@@ -525,6 +546,6 @@ if __name__ == "__main__":
 API_MODELS: tuple[type[BaseModel], ...] = (
     BowlerIn, BowlerRecord, SessionRecord, JobRecord, SessionOut, CalibrationIn, CoachIn,
     CoachOut, ChatTurn, ConfirmIn, SettingsOut, LocalSettings, WorkloadPoint, WorkloadOut,
-    ReferencesOut, ReferenceAction, Drill,
+    ReferencesOut, ReferenceAction, Drill, DeliveryOut,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

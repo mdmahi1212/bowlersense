@@ -183,7 +183,10 @@ def test_gate_upload_to_results(done: Env) -> None:
     assert result["artifacts"]["overlay"].startswith(f"outputs/{_sid(done)}/")
     assert result["workload"]["balls_this_session"] == 1
     assert len(body["delivery_ids"]) == 1
-    delivery = done.client.get(f"/deliveries/{body['delivery_ids'][0]}").json()
+    out = done.client.get(f"/deliveries/{body['delivery_ids'][0]}").json()
+    assert out["session_id"] == _sid(done) and out["fps"] == 120 and out["delivery_count"] == 1
+    assert out["overlay"] == result["artifacts"]["overlay"]
+    delivery = out["delivery"]
     assert delivery["delivery_idx"] == 0 and delivery["angles"][0]["name"] == "elbow"
     assert all(k.startswith("outputs/") for k in delivery["keyframes"].values())
     assert done.repo.count_rows("faults") >= 0 and done.repo.count_rows("delivery_metrics") == 3

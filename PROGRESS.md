@@ -1,5 +1,36 @@
 # BowlSense — Progress
 
+## Phase 14: Next.js web app ✅ (2026-11-20)
+
+- **Stack**: Next.js 16.4.6 (App Router, TypeScript, Turbopack), React 19.3, Tailwind CSS 4, Recharts 3, all pinned exactly.
+  - Local only: no Google fonts (system font stack), no telemetry (`NEXT_TELEMETRY_DISABLED`), and dev/start bound to 127.0.0.1.
+  - The API address is read per request from `BOWLSENSE_API_URL` (accepted only if it's a loopback URL) and handed to the browser in a `<meta>` tag, so `run.py` can move ports without a rebuild.
+  - UI primitives (Button, Card, Badge, states) follow shadcn/ui's copy-in pattern (`components/ui/`) without its CLI or registry download.
+- **Types are generated, never hand-written.** `npm run gen-types` runs `python -m bowlsense.schemas --with-api` (contracts plus API bodies, serialization mode) and then json-schema-to-typescript, producing `lib/types.ts`. `lib/api.ts` is the typed client, including an XHR upload with progress.
+- **API additions for the UI**: `GET /sessions/{id}/video` (raw upload, Range), `/drills`, `/references`, and `/deliveries/{id}`, which now returns `DeliveryOut` (the delivery plus session fps, size, arm, view, overlay and pose paths).
+- **Pages**:
+  - **Upload** (`/`): drag and drop, bowler picker or inline create, low-fps opt-in, optional keypoints JSON, recording tips, upload progress bar.
+  - **Sessions** (`/sessions`): list with filter by bowler and delete.
+  - **Session dashboard** (`/sessions/[id]`): live status via SSE with a 2 s polling fallback. When done it shows:
+    - technique score, injury gauge (band in words), legality badge with the screening note, consistency;
+    - the delivery table, fatigue trend, and pitch map with the click-4-corners calibration UI (saves, then re-runs);
+    - the coach report, PDF download, coach chat, and closest references.
+  - **Delivery detail** (`/deliveries/[id]`):
+    - player with overlay/raw toggle, ← → frame stepping, phase markers and jump buttons;
+    - keyframe strip (click to seek);
+    - elbow, front-knee and trunk charts synced to the player cursor, click to seek, with the 15° band on the elbow chart;
+    - fault list with severity, "jump to frame" and drills, plus checks not possible from this view;
+    - body risk map and key numbers.
+  - **Compare** (`/compare`): pick a delivery and a reference; synced side-by-side skeleton playback (time-normalised from BFC to follow-through, play/scrub, mirror for left-armers) and per-joint deviation bars.
+  - **Bowlers** (`/bowlers`): profiles, create, session history, ACWR chart with the 0.8–1.3 band and the 1.5 flag line.
+  - **Settings** (`/settings`): Ollama model picker (from `/llm/models`), pose backend, GPU on/off, LLM on/off, model files present, storage usage, and "Delete all my data" (type DELETE).
+  - Every page handles loading, empty and error states. `useAsync` turns rejections into text, so there are no unhandled promise rejections. Risk colours always come with text labels. The theme is dark-first.
+- **Tests**:
+  - `npm run lint` (ESLint and Prettier) is clean and `npm run build` passes.
+  - Vitest: 10 unit tests (utils, API client errors and URLs, runtime API address).
+  - Playwright smoke test (`npm run test:e2e`, using installed Edge on Windows, so no browser download): `tests/e2e/stack.mjs` starts a throwaway API and worker with the offline guard on and a pre-migrated DB. The browser uploads a rendered synthetic delivery with its keypoints, waits for the result, then checks the technique score, the flagged elbow, the coach report and the delivery detail page (knee-collapse fault, angle charts, video), and visits every page with no page errors.
+  - `scripts/check.py` now runs lint, build, unit and e2e.
+
 ## Phase 13: SQLite schema + Alembic + local storage ✅ (2026-11-20)
 
 Most of this was built in Phase 1: ORM tables, Alembic, WAL, foreign keys, cascades, `BEGIN IMMEDIATE` claims, safe storage paths, and the repo-level two-process test. Phase 12 added migration `0002`. This phase adds the gate's real-process check:
@@ -288,4 +319,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 14: Next.js app (all pages) + Playwright smoke test.
+**Next**: Phase 15: image mode, learned phase model flag tests, optional 3D lift.

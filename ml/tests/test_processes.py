@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 from bowlsense.config import DEFAULT_CONFIG_PATH
+from bowlsense.db.session import make_engine, upgrade
 from synth.skeleton_gen import SynthParams, generate, render_to_video
 
 ML_DIR = Path(__file__).resolve().parents[1]
@@ -45,6 +46,7 @@ def stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[str, Path,
         json.dumps({"coach_model": "llama3.1:8b", "pose_backend": "rtm", "use_llm": False}),
         encoding="utf-8",
     )
+    upgrade(make_engine(tmp / "db.sqlite"))  # migrate once, as run.py does, before both start
     port = _free_port()
     env = {**os.environ, "BOWLSENSE_CONFIG": str(cfg_file), "BOWLSENSE_API_PORT": str(port),
            "BOWLSENSE_OFFLINE": "1", "PYTHONUNBUFFERED": "1"}  # fmt: skip
