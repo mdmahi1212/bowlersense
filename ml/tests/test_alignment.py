@@ -190,3 +190,16 @@ def test_fitted_minimum_fallbacks() -> None:
     assert np.isnan(fitted_minimum(np.full(5, np.nan), 0, 4, 2))
     sparse = np.array([5.0, np.nan, 1.0, np.nan, 5.0])
     assert fitted_minimum(sparse, 0, 4, 2) == pytest.approx(1.0)
+
+
+def test_full_width_falls_back_when_runup_window_is_empty() -> None:
+    """Front-on clips can get bound <= run_up_start; calibration then uses earlier frames."""
+    from bowlsense.analysis.alignment import full_width
+
+    s = load_settings()
+    r = generate(SynthParams(view="front", fps=120.0))
+    seq = clean_sequence(r.sequence, s.pose)
+    good = full_width(seq, r.phases, "shoulder", s.alignment.width_calib_top_frac)
+    broken = r.phases.model_copy(update={"bound": r.phases.run_up_start})
+    fallback = full_width(seq, broken, "shoulder", s.alignment.width_calib_top_frac)
+    assert fallback == pytest.approx(good, rel=0.1)

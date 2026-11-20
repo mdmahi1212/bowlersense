@@ -168,13 +168,22 @@ def estimate_height_px(seq: PoseSequence, settings: BodySettings) -> HeightEstim
     Per frame the lower ankle is used (the stance leg is the extended one).
 
     Raises:
-        PoseQualityError: if the nose or both ankles are missing throughout the run-up.
+        PoseQualityError: if the nose or both ankles are missing in every frame (the run-up
+            is preferred; the whole clip is used when the run-up has no full-body frame).
     """
     start, stop = runup_window(seq, settings)
-    nose_y = keypoint_track(seq, "nose")[start:stop, 1]
-    dists = [keypoint_track(seq, f"{side}_ankle")[start:stop, 1] - nose_y for side in ("l", "r")]
-    per_frame = np.fmax(dists[0], dists[1])
+
+    def vertical(lo: int, hi: int) -> FloatArray:
+        nose_y = keypoint_track(seq, "nose")[lo:hi, 1]
+        d = [keypoint_track(seq, f"{side}_ankle")[lo:hi, 1] - nose_y for side in ("l", "r")]
+        return np.asarray(np.fmax(d[0], d[1]), dtype=np.float64)
+
+    per_frame = vertical(start, stop)
     valid = np.flatnonzero(np.isfinite(per_frame))
+    if valid.size == 0:  # bowler not fully in view during the run-up: use the whole clip
+        start, stop = 0, len(seq.frames)
+        per_frame = vertical(start, stop)
+        valid = np.flatnonzero(np.isfinite(per_frame))
     if valid.size == 0:
         raise PoseQualityError(
             "The nose and ankles are never visible together during the run-up, so body "

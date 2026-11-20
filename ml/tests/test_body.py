@@ -7,7 +7,7 @@ import itertools
 import numpy as np
 import pytest
 
-from bowlsense.config import Settings
+from bowlsense.config import Settings, load_settings
 from bowlsense.errors import InvalidInputError, PoseQualityError
 from bowlsense.geometry.angles import keypoint_track
 from bowlsense.geometry.body import (
@@ -197,3 +197,19 @@ def test_mirror_handles_missing_and_z() -> None:
     kp = out.get("r_wrist")
     assert kp is not None and (kp.x, kp.y, kp.z, kp.conf) == (90, 5, -3.0, 0.8)
     assert out.get("l_wrist") is None
+
+
+def test_height_falls_back_to_whole_clip_when_runup_is_hidden() -> None:
+    """If the full body never shows during the run-up, height comes from later frames."""
+    s = load_settings()
+    seq = generate(SynthParams(fps=120.0, height_px=400.0)).sequence
+    full = estimate_height_px(seq, s.body)
+    start, stop = full.window
+    frames = [
+        f.model_copy(update={"keypoints": {**f.keypoints, "nose": None}}) if start <= i < stop
+        else f
+        for i, f in enumerate(seq.frames)
+    ]  # fmt: skip
+    fallback = estimate_height_px(seq.model_copy(update={"frames": frames}), s.body)
+    assert fallback.window == (0, len(seq.frames))
+    assert fallback.height_px == pytest.approx(full.height_px, rel=0.25)

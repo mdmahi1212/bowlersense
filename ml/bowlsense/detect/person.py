@@ -131,14 +131,37 @@ def track_motion(track: PersonTrack, frame_width: int) -> tuple[float, float]:
     return displacement, peak
 
 
+def track_features(track: PersonTrack) -> tuple[float, float]:
+    """(2D extent, size change) of a track, both camera-distance independent.
+
+    Extent: how far the box centre travels (5th-95th percentile range in x and y) in units
+    of the person's median box height. Size change: log of the 95th / 5th percentile box
+    height, large when someone runs towards or away from the camera.
+    """
+    if len(track.frames) < 2:
+        return 0.0, 0.0
+    b = np.asarray(track.boxes, dtype=np.float64)
+    h = np.maximum(b[:, 3] - b[:, 1], 1.0)
+    cx, cy = (b[:, 0] + b[:, 2]) / 2.0, (b[:, 1] + b[:, 3]) / 2.0
+    span = np.hypot(np.ptp(np.percentile(cx, [5, 95])), np.ptp(np.percentile(cy, [5, 95])))
+    extent = float(span / np.median(h))
+    size = float(np.log(np.percentile(h, 95) / np.percentile(h, 5)))
+    return extent, size
+
+
 def select_bowler(
     tracks: list[PersonTrack],
     frame_width: int,
     min_frames: int,
     override_id: int | None = None,
 ) -> PersonTrack:
-    """The bowler: the track with the largest horizontal displacement plus highest peak
-    speed (each normalised by the best among the tracks), or ``override_id`` if given.
+    """The bowler, or the ``override_id`` track if given.
+
+    Each usable track is scored on three things, each normalised by the best track:
+    how far it moves across the image (any direction, in body heights, so a side-on run-up
+    and a run towards the camera both count), how much its size changes (approaching or
+    leaving the camera) and how much of the clip it covers (the bowler is the subject).
+    ``frame_width`` is kept for the API; the features are scale-free.
 
     Raises:
         NoBowlerDetectedError: if no usable track exists or ``override_id`` isn't one.
@@ -157,10 +180,14 @@ def select_bowler(
             f"No person was tracked for at least {min_frames} frames "
             f"({len(tracks)} short track(s) found)."
         )
-    motions = [track_motion(t, frame_width) for t in usable]
-    max_disp = max(m[0] for m in motions) or 1.0
-    max_speed = max(m[1] for m in motions) or 1.0
-    scores = [d / max_disp + s / max_speed for d, s in motions]
+    feats = [track_features(t) for t in usable]
+    longest = max(len(t.frames) for t in usable)
+    max_extent = max(f[0] for f in feats) or 1.0
+    max_size = max(f[1] for f in feats) or 1.0
+    scores = [
+        e / max_extent + sz / max_size + len(t.frames) / longest
+        for (e, sz), t in zip(feats, usable, strict=True)
+    ]
     best = int(np.argmax(scores))
     log.info(
         "bowler: track %d (score %.2f of %d tracks)",

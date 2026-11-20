@@ -193,6 +193,22 @@ def test_select_bowler_prefers_runner() -> None:
     assert chosen.track_id == 7
 
 
+def test_select_bowler_running_towards_camera() -> None:
+    """Front-on: the bowler barely moves sideways but grows and moves down the image; short
+    stray fragments (ID switches) mustn't win on a single fast jump."""
+    standing = [
+        PersonTrack(track_id=2, frames=list(range(200)), confs=[0.9] * 200,
+                    boxes=[(1100.0 + (i % 3), 400.0, 1180.0, 700.0) for i in range(200)])
+    ]  # fmt: skip
+    bowler = PersonTrack(
+        track_id=1, frames=list(range(200)), confs=[0.9] * 200,
+        boxes=[(950.0 - 0.6 * i, 400.0 + 0.5 * i, 1010.0 + 0.6 * i, 600.0 + 1.5 * i)
+               for i in range(200)],
+    )  # fmt: skip
+    fragment = _track(7, [900.0 + (40.0 if i % 2 else 0.0) for i in range(30)], start=160)
+    assert select_bowler([*standing, bowler, fragment], 1920, min_frames=10).track_id == 1
+
+
 def test_select_bowler_override_and_errors() -> None:
     a, b = _track(1, [0.0] * 20), _track(2, [float(i) for i in range(20)])
     assert select_bowler([a, b], 1920, 10, override_id=1).track_id == 1

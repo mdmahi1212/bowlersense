@@ -18,7 +18,7 @@ from pathlib import Path
 from bowlsense.config import Settings, load_settings
 from bowlsense.db.repo import JobRecord, Repository
 from bowlsense.db.session import get_engine
-from bowlsense.errors import NotFoundError
+from bowlsense.errors import BowlSenseError, NotFoundError
 from bowlsense.local_settings import LocalSettings, effective_settings, load_local_settings
 from bowlsense.offline import enable_if_requested
 from bowlsense.pipeline import PipelineOptions, run_pipeline
@@ -112,8 +112,13 @@ class Worker:
                 return None
             detail = f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
             log.error("job %s failed: %s", job.id, exc)
+            # Input problems (bad video, no bowler, poor pose) fail the same way every time:
+            # don't retry them. Unexpected errors get the configured retries.
+            attempts = job.attempts if isinstance(exc, BowlSenseError) else None
             try:
-                self.repo.fail_job(job.id, detail, self.settings.jobs.max_attempts)
+                self.repo.fail_job(
+                    job.id, detail, attempts if attempts else self.settings.jobs.max_attempts
+                )
             except NotFoundError:
                 log.info("job %s: its session was deleted while running; skipped", job.id)
             return None

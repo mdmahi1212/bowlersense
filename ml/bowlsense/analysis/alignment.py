@@ -42,6 +42,9 @@ def _orientation_sign(seq: PoseSequence) -> float:
     return arm * view
 
 
+MIN_CALIBRATION_FRAMES = 3
+
+
 def _normalised_width(seq: PoseSequence, part: str) -> FloatArray:
     """Signed width of a body line (shoulders or hips) / trunk length, per frame."""
     arm = seq.bowling_arm
@@ -79,6 +82,12 @@ def full_width(seq: PoseSequence, phases: PhaseEvents, part: str, top_frac: floa
     """
     label = "shoulders" if part == "shoulder" else "hips"
     width = _normalised_width(seq, part)
+    # Run-up start -> bound is preferred. When the phases put the bound at or before the
+    # run-up start (common from front-on, where run-up events can't be timed), fall back to
+    # everything before back-foot contact, then everything before release.
+    for lo, hi in ((phases.run_up_start, phases.bound), (0, phases.bfc), (0, phases.release)):
+        if int(np.isfinite(width[max(0, lo) : max(0, hi)]).sum()) >= MIN_CALIBRATION_FRAMES:
+            return _full_width(width, max(0, lo), hi, top_frac, label)
     return _full_width(width, phases.run_up_start, phases.bound, top_frac, label)
 
 

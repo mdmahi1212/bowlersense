@@ -243,17 +243,36 @@ def test_calibration_requeues_and_reuses_pose(done: Env) -> None:
 # --- failures and deletion ----------------------------------------------------------------------
 
 
-def test_worker_retries_then_fails(env: Env) -> None:
+def test_bad_input_fails_at_once(env: Env) -> None:
+    """An unreadable video fails the same way every time, so it isn't retried."""
     r = env.client.post("/sessions", files={"file": ("bad.mp4", b"not a video", "video/mp4")})
     sid = r.json()["session"]["id"]
-    for _ in range(env.settings.jobs.max_attempts):
-        assert env.worker.run_once() is True
+    assert env.worker.run_once() is True
     assert env.worker.run_once() is False
     body = env.client.get(f"/sessions/{sid}").json()
     assert body["session"]["status"] == "failed" and body["result"] is None
-    assert body["job"]["attempts"] == env.settings.jobs.max_attempts
+    assert body["job"]["attempts"] == 1
     job = env.repo.latest_job_for_session(sid)
     assert job is not None and job.last_error is not None and "Traceback" in job.last_error
+
+
+def test_unexpected_errors_are_retried(
+    env: Env, clip: tuple[bytes, bytes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bowlsense.worker as worker_mod
+
+    def crash(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("GPU out of memory")
+
+    monkeypatch.setattr(worker_mod, "run_pipeline", crash)
+    session = env.upload(clip)["session"]
+    assert isinstance(session, dict)
+    for _ in range(env.settings.jobs.max_attempts):
+        assert env.worker.run_once() is True
+    assert env.worker.run_once() is False
+    body = env.client.get(f"/sessions/{session['id']}").json()
+    assert body["session"]["status"] == "failed"
+    assert body["job"]["attempts"] == env.settings.jobs.max_attempts
 
 
 def test_delete_session_removes_rows_and_files(env: Env, clip: tuple[bytes, bytes]) -> None:
