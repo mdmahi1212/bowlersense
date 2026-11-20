@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--val-frac", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", type=Path, default=load_settings().storage.models_path)
+    p.add_argument("--name", default="phase_model.pt", help="weights file name in --out")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     import torch
@@ -260,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
-    weights = out / "phase_model.pt"
+    weights = out / args.name
     torch.save(net.state_dict(), weights)
     meta = {
         "feature_version": FEATURE_VERSION,
@@ -270,7 +271,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     meta_path(weights).write_text(json.dumps(meta, indent=2), encoding="utf-8")
     REPORTS.mkdir(parents=True, exist_ok=True)
-    (REPORTS / "release_model.json").write_text(
+    report_name = (
+        "release_model.json"
+        if args.name == "phase_model.pt"
+        else (f"release_model_{Path(args.name).stem}.json")
+    )
+    (REPORTS / report_name).write_text(
         json.dumps({**report, "history": info["history"]}, indent=2), encoding="utf-8"
     )
     for name in ("learned_model", "rule_based"):

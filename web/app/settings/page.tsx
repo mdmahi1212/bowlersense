@@ -129,6 +129,24 @@ function SettingsForm({
             <option value="mediapipe">MediaPipe (fallback)</option>
           </select>
         </label>
+        <label className="flex flex-col gap-1">
+          Pose accuracy
+          <select
+            value={s.accuracy ?? "auto"}
+            onChange={(e) =>
+              setS({ ...s, accuracy: e.target.value as NonNullable<LocalSettings["accuracy"]> })
+            }
+            className={field}
+          >
+            <option value="auto">Auto: accurate models on a GPU, fast ones on CPU</option>
+            <option value="accurate">Accurate: RTMPose-x 384×288 + flip, YOLO11x, 3D elbow</option>
+            <option value="fast">Fast: RTMPose-m 256×192, YOLO11n</option>
+          </select>
+          <span className="text-xs text-muted">
+            Measured on 85 held-out real clips: accurate picks the bowling arm 70% vs 62% and loses
+            the wrist near release 1% vs 11% of frames; release timing is about the same.
+          </span>
+        </label>
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

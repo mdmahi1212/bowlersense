@@ -929,6 +929,7 @@ export interface LocalSettings {
   use_gpu: boolean;
   use_llm: boolean;
   use_phase_model: boolean;
+  accuracy: "auto" | "fast" | "accurate";
 }
 /**
  * Everyone tracked in a session's video, and which one was analysed as the bowler.

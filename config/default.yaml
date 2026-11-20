@@ -46,7 +46,7 @@ pose:
   accurate_rtm_input_size: [288, 384]
   flip_test: true       # accurate profile: also run pose on the mirrored crop and average
   accurate_lift_3d: true  # accurate profile: 3D-lift with MotionBERT when its model is present
-  wrist_refine: true    # optical-flow refinement of the bowling wrist around each release
+  wrist_refine: false   # optical-flow wrist refinement: OFF, it lowered release accuracy on real footage (data/eval/pose_compare.json)
   refine_window_s: 0.15 # ...over this long either side of release
   refine_conf: 0.6      # pose wrist points below this confidence are replaced by the flow track
   refine_max_jump_h: 0.12  # ...and so are pose points this far (fraction of height) off the flow
@@ -62,6 +62,7 @@ phases:
   use_model: true                   # trained release model (models/phase_model.pt): 75% within 1 frame on real footage vs 48% for rules
   model_agreement_s: 0.15          # rules' release is kept when within this of the model's (rules are frame-precise)
   model_file: phase_model.pt
+  accurate_model_file: phase_model_accurate.pt  # release model for the accurate pose profile
   release_refine_frames: 3          # refine release to the wrist-height peak within +-N frames
   ffc_window_s: 0.4                 # search for front-foot contact this long before release
   bfc_window_s: 0.35                # search for back-foot contact this long before ffc

@@ -117,7 +117,7 @@ class PoseSettings(_Section):
     flip_test: bool = True
     use_flip_test: bool = False  # set by the accurate profile (see local_settings)
     accurate_lift_3d: bool = True
-    wrist_refine: bool = True
+    wrist_refine: bool = False
     refine_window_s: float = Field(default=0.15, gt=0, le=1)
     refine_conf: float = Field(default=0.6, ge=0, le=1)
     refine_max_jump_h: float = Field(default=0.12, gt=0, le=1)
@@ -139,6 +139,7 @@ class PhaseSettings(_Section):
     use_model: bool
     model_agreement_s: float = Field(ge=0)
     model_file: str = Field(min_length=1)
+    accurate_model_file: str = "phase_model_accurate.pt"  # trained on accurate-profile poses
     release_refine_frames: int = Field(ge=0)
     ffc_window_s: float = Field(gt=0)
     bfc_window_s: float = Field(gt=0)

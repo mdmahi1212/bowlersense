@@ -1,0 +1,35 @@
+{
+ "format_version": 1,
+ "files": {
+  ".gitattributes": {
+   "size": 2461,
+   "blob_id": "1ef325f1b111266a6b26e0196871bd78baa8c2f3"
+  },
+  "shard-00000.tar": {
+   "size": 2602096640,
+   "blob_id": "1d5f169e47847ab7444877c413db79f79aedb43e",
+   "lfs_sha256": "db67408ea71b9de8ad7c27bd3c594795b5313547d5d9e51eb869e28fdb2bf293",
+   "lfs_size": 2602096640,
+   "xet_hash": "2717e562169b61000ce2fb6d9d08a74b7a72b6653062d404eeaaa1367cf253e4"
+  },
+  "shard-00001.tar": {
+   "size": 889425920,
+   "blob_id": "dad06f065fe9a456051eacf7d87214d654080524",
+   "lfs_sha256": "bb7d70e686b5e232f19931a68e231cd62dd635809d695b3b0301968274424b8f",
+   "lfs_size": 889425920,
+   "xet_hash": "5f289dc20671edea26d8910e60503cae81babba131f9c7955d17693791123afd"
+  },
+  "test03.json": {
+   "size": 433997,
+   "blob_id": "f5776d900d3e8dee145980b502c9f0337a9c7021"
+  },
+  "train03.json": {
+   "size": 1130003,
+   "blob_id": "1fb359d9d5d1d205cd91e2c3ff1542053537f40c"
+  },
+  "trainval.json": {
+   "size": 1563998,
+   "blob_id": "d28362e551dc9a5ecf4ca61b5d5c8f356c4e43fe"
+  }
+ }
+}

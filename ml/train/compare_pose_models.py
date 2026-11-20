@@ -29,6 +29,7 @@ from bowlsense.geometry.angles import keypoint_track
 from bowlsense.geometry.body import detect_bowling_arm, joint
 from bowlsense.local_settings import accuracy_profile
 from bowlsense.phases.heuristic import find_release
+from bowlsense.phases.model import load_phase_model
 from bowlsense.pose.refine import refine_wrist
 from bowlsense.schemas import PoseSequence
 from train.dataset import dataset_dir
@@ -105,12 +106,15 @@ def _wrist_quality(item: ExtractedDelivery) -> tuple[float, float, float]:
     return jitter, float(np.mean(np.isnan(xy[:, 0]))), float(np.mean(confs))
 
 
-def score(items: list[ExtractedDelivery]) -> dict[str, Any]:
+def score(items: list[ExtractedDelivery], model_file: str | None = None) -> dict[str, Any]:
     """Every metric for one set of extracted poses."""
     samples = prepare(items)
     by_key = {s.key: s for s in samples}
     fps = samples[0].seq.fps if samples else 25.0
     errors: list[int | None] = []
+    learned: list[int | None] = []
+    st = load_settings()
+    model = load_phase_model(st.storage.models_path / (model_file or st.phases.model_file))
     rng = np.random.default_rng(0)
     for s in samples:
         n = len(s.seq.frames)
@@ -122,6 +126,11 @@ def score(items: list[ExtractedDelivery]) -> dict[str, Any]:
                                                                           n - length))  # fmt: skip
             r = heuristic_release(s.seq, a, a + length)
             errors.append(None if r is None else r - (s.release - a))
+            crop = s.seq.model_copy(update={"frames": s.seq.frames[a : a + length]})
+            try:
+                learned.append(model.predict(crop).release - (s.release - a))
+            except BowlSenseError:
+                learned.append(None)
     arm_hits = [
         detect_bowling_arm(by_key[it.delivery.key].seq).arm == it.delivery.bowler_hand
         for it in items
@@ -131,6 +140,7 @@ def score(items: list[ExtractedDelivery]) -> dict[str, Any]:
     return {
         "deliveries": len(samples),
         "release_rules": summarise(errors, fps),
+        "release_learned": summarise(learned, fps),
         "bowling_arm_accuracy": float(np.mean(arm_hits)) if arm_hits else float("nan"),
         "wrist_jitter_pct_height": float(np.nanmean(quality[:, 0])),
         "wrist_dropout_near_release": float(np.mean(quality[:, 1])),
@@ -151,19 +161,25 @@ def main(argv: list[str] | None = None) -> int:
     acc = {i.delivery.key: i for i in load_extracted(args.accurate) if i.delivery.split == "test"}
     keys = sorted(fast.keys() & acc.keys())
     log.info("%d shared test deliveries", len(keys))
+    st = load_settings()
+    acc_model = (
+        st.phases.accurate_model_file
+        if (st.storage.models_path / st.phases.accurate_model_file).is_file()
+        else st.phases.model_file
+    )
     results = {
         "fast (RTMPose-m 256x192)": score([fast[k] for k in keys]),
-        "accurate (RTMPose-x 384x288 + flip)": score([acc[k] for k in keys]),
-        "accurate + wrist refinement": score([_refined(acc[k], root) for k in keys]),
+        "accurate (RTMPose-x 384x288 + flip)": score([acc[k] for k in keys], acc_model),
+        "accurate + wrist refinement": score([_refined(acc[k], root) for k in keys], acc_model),
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(results, indent=1), encoding="utf-8")
     for name, r in results.items():
-        rel = r["release_rules"]
+        rel, lr = r["release_rules"], r["release_learned"]
         log.info(
-            "%-38s release +-1: %5.1f%%  +-2: %5.1f%%  MAE %5.1f ms | arm %5.1f%% | jitter %.2f%% "
-            "| dropouts %4.1f%% | conf %.2f",
-            name, 100 * rel["within_1"], 100 * rel["within_2"], rel["mae_ms"],
+            "%-38s learned release +-1: %5.1f%% MAE %5.1f ms | rules +-1: %5.1f%% | arm %5.1f%% "
+            "| jitter %.2f%% | dropouts %4.1f%% | conf %.2f",
+            name, 100 * lr["within_1"], lr["mae_ms"], 100 * rel["within_1"],
             100 * r["bowling_arm_accuracy"], r["wrist_jitter_pct_height"],
             100 * r["wrist_dropout_near_release"], r["wrist_conf_near_release"],
         )  # fmt: skip

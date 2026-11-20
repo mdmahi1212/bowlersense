@@ -1,0 +1,83 @@
+{
+ "fast (RTMPose-m 256x192)": {
+  "deliveries": 85,
+  "release_rules": {
+   "n": 255,
+   "within_1": 0.4980392156862745,
+   "within_2": 0.5333333333333333,
+   "within_3": 0.5490196078431373,
+   "within_5": 0.5490196078431373,
+   "mae_frames": 4.777777777777778,
+   "mae_ms": 159.25925925925924,
+   "no_answer": 0.011764705882352941
+  },
+  "release_learned": {
+   "n": 255,
+   "within_1": 0.7372549019607844,
+   "within_2": 0.8549019607843137,
+   "within_3": 0.9058823529411765,
+   "within_5": 0.9529411764705882,
+   "mae_frames": 1.392156862745098,
+   "mae_ms": 46.40522875816993,
+   "no_answer": 0.0
+  },
+  "bowling_arm_accuracy": 0.6190476190476191,
+  "wrist_jitter_pct_height": 15.368613235867723,
+  "wrist_dropout_near_release": 0.1046439628482972,
+  "wrist_conf_near_release": 0.47348233676362694
+ },
+ "accurate (RTMPose-x 384x288 + flip)": {
+  "deliveries": 85,
+  "release_rules": {
+   "n": 255,
+   "within_1": 0.5215686274509804,
+   "within_2": 0.5686274509803921,
+   "within_3": 0.592156862745098,
+   "within_5": 0.6039215686274509,
+   "mae_frames": 4.693548387096774,
+   "mae_ms": 156.4516129032258,
+   "no_answer": 0.027450980392156862
+  },
+  "release_learned": {
+   "n": 255,
+   "within_1": 0.7019607843137254,
+   "within_2": 0.8784313725490196,
+   "within_3": 0.9176470588235294,
+   "within_5": 0.9490196078431372,
+   "mae_frames": 1.4901960784313726,
+   "mae_ms": 49.673202614379086,
+   "no_answer": 0.0
+  },
+  "bowling_arm_accuracy": 0.7023809523809523,
+  "wrist_jitter_pct_height": 18.301128197211646,
+  "wrist_dropout_near_release": 0.009287925696594427,
+  "wrist_conf_near_release": 0.5903713427507102
+ },
+ "accurate + wrist refinement": {
+  "deliveries": 85,
+  "release_rules": {
+   "n": 255,
+   "within_1": 0.25098039215686274,
+   "within_2": 0.3411764705882353,
+   "within_3": 0.41568627450980394,
+   "within_5": 0.5137254901960784,
+   "mae_frames": 5.755102040816326,
+   "mae_ms": 191.83673469387753,
+   "no_answer": 0.0392156862745098
+  },
+  "release_learned": {
+   "n": 255,
+   "within_1": 0.615686274509804,
+   "within_2": 0.8313725490196079,
+   "within_3": 0.8745098039215686,
+   "within_5": 0.9176470588235294,
+   "mae_frames": 1.9725490196078432,
+   "mae_ms": 65.75163398692811,
+   "no_answer": 0.0
+  },
+  "bowling_arm_accuracy": 0.5833333333333334,
+  "wrist_jitter_pct_height": 15.96655849124965,
+  "wrist_dropout_near_release": 0.008668730650154798,
+  "wrist_conf_near_release": 0.5837868611242379
+ }
+}

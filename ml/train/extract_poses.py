@@ -68,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dataset", type=Path)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--backend", default="rtm", choices=["rtm", "mediapipe"])
+    parser.add_argument("--split", choices=["train", "test"], help="only this split")
     parser.add_argument(
         "--reverse", action="store_true",
         help="work from the last video backwards (run a second worker alongside the first)",
@@ -94,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     todo: dict[str, list[Delivery]] = defaultdict(list)
     for d in deliveries(root):
+        if args.split and d.split != args.split:
+            continue
         if not (out / f"{d.key}.json").is_file():
             todo[d.video].append(d)
     if not todo:

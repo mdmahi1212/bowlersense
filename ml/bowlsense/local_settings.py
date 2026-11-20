@@ -109,6 +109,9 @@ def accuracy_profile(settings: Settings) -> Settings:
                     "rtm_input_size": pose.accurate_rtm_input_size}  # fmt: skip
     if pose.accurate_lift_3d and (models / pose.lift_model).is_file():
         pose_up["lift_3d"] = True
+    phases = settings.phases
+    if (models / phases.accurate_model_file).is_file():  # release model trained on these poses
+        phases = phases.model_copy(update={"model_file": phases.accurate_model_file})
     det_up = {}
     if (models / det.accurate_yolo_model).is_file():
         det_up["yolo_model"] = det.accurate_yolo_model
@@ -117,5 +120,6 @@ def accuracy_profile(settings: Settings) -> Settings:
             "pose": pose.model_copy(update=pose_up),
             "detect": det.model_copy(update=det_up),
             "ball": ball.model_copy(update={"imgsz": ball.accurate_imgsz}),
+            "phases": phases,
         }
     )

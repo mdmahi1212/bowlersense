@@ -2715,6 +2715,16 @@
           "default": false,
           "title": "Use Phase Model",
           "type": "boolean"
+        },
+        "accuracy": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fast",
+            "accurate"
+          ],
+          "title": "Accuracy",
+          "type": "string"
         }
       },
       "required": [
@@ -2722,7 +2732,8 @@
         "pose_backend",
         "use_gpu",
         "use_llm",
-        "use_phase_model"
+        "use_phase_model",
+        "accuracy"
       ],
       "title": "LocalSettings",
       "type": "object"
