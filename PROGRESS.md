@@ -1,5 +1,34 @@
 # BowlSense — Progress
 
+## Phase 12: Full pipeline + CLI + FastAPI + worker ✅ (2026-11-20)
+
+- **`pipeline.run_pipeline`** runs a video through every stage and writes overlay.mp4, keyframes, charts, report.pdf, pose.json, coach_summary.json and result.json. It returns a `SessionResult`, reports progress (0–100 % plus a stage name) through a callback, and works with the offline guard on.
+  - `DeliveryMetrics` gained: clip offsets, alignment, fault measurements and not-measured reasons, delivery type, ball notes and track, reference comparisons, and keyframe paths. `stride_pct` and `release_height_pct` are `None` when the view can't measure them.
+  - `SessionResult` gained: video facts, view, arm, pose backend, the detailed consistency, and the coach source and note. `consistency_score` is `None` with one delivery instead of a fake number.
+- **CLI** is now a thin wrapper over `run_pipeline`. Its `result.json` *is* the `SessionResult`.
+- **`worker.py`** (`python -m bowlsense.worker [--once]`):
+  - polls `jobs`, claims atomically, and throttles progress writes for the SSE stream;
+  - builds options from the session, the bowler profile (arm and workload history) and the local settings;
+  - stores results in the DB (deliveries, angle series, faults, summary);
+  - retries up to `jobs.max_attempts` and keeps the traceback in `last_error`.
+  - A calibration re-run reuses the stored pose.json, so pose estimation isn't repeated.
+- **`api.py`** (`python -m bowlsense.api`, 127.0.0.1 only; CORS only for the local web port) covers every Section 9 endpoint except `/analyze/image` (Phase 15):
+  - health (model files, GPU), settings get/put, `/llm/models`, `DELETE /data` (needs `{"confirm": "DELETE"}`);
+  - bowlers, `/bowlers/{id}/workload` (ACWR per day plus the 0.8–1.3 band);
+  - sessions: create, list, get, delete, SSE events, calibration (validated, then re-queued), report.pdf, coach chat with history;
+  - `/deliveries/{id}`, and `/files/{path}` serving `outputs/` only, with HTTP Range (206) and traversal rejected.
+  - Uploads stream to `raw/<uuid>.<ext>`: 415 for other types (images point to `/analyze/image`), 413 above the size limit, and partial files are removed. An optional `pose_file` (PoseSequence JSON) can be uploaded with a video to skip the pose model; the tests and the Playwright smoke test use it.
+- **Supporting changes**:
+  - `local_settings.py`: settings-page overrides (Ollama model, pose backend, GPU on/off, LLM on/off) in `data/settings.json`;
+  - `device.py`: the GPU switch, honoured by RTMPose and YOLO;
+  - Alembic `0002`: `sessions.options` and `original_name`;
+  - repo: `save_results`, `list_deliveries`, `get_delivery`, `set_session_options`;
+  - `synth/sessions.py`: a multi-ball session generator;
+  - FastAPI, Starlette, Uvicorn and python-multipart pinned.
+- **Tests**:
+  - `test_pipeline_synthetic.py` (5): a 3-ball video run with the offline guard on, checking phases, legality, faults, angles, references, workload with history, artifacts, progress, and the no-profile/one-ball path.
+  - `test_api.py` (18): upload → worker → results, SSE, Range, traversal, PDF, coach chat, workload, calibration re-run, retry → failed with traceback, cascade delete of rows and files, delete-all confirmation, validation, CORS.
+
 ## Phase 11: Coach (drills, local Ollama + template fallback, chat) ✅ (2026-11-20)
 
 - `coach/drills.py`: 2–3 drills (name, description, reps) for each of the 10 fault codes.
@@ -252,4 +281,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 12: full pipeline + FastAPI + worker.
+**Next**: Phase 13: SQLite/Alembic/storage gate (two-process concurrency test).

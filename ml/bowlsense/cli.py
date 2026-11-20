@@ -12,18 +12,12 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from bowlsense.config import load_settings
 from bowlsense.errors import BowlSenseError, CalibrationError, ConfigError
 from bowlsense.geometry.pitch import PitchCalibration, calibrate
-from bowlsense.pipeline import analyze_session, extract_pose
-from bowlsense.pose.smoothing import clean_sequence
-from bowlsense.render.clipping import sub_sequence
-from bowlsense.render.keyframes import export_keyframes
-from bowlsense.render.overlay import OverlayPainter, OverlaySegment, render_overlay
-from bowlsense.render.report_pdf import ReportDelivery, ReportInput, build_report
+from bowlsense.pipeline import PipelineOptions, run_pipeline
 
 log = logging.getLogger("bowlsense.cli")
 
@@ -51,6 +45,9 @@ def _parser() -> argparse.ArgumentParser:
         help='pitch calibration JSON: {"points": [[x, y] x 4]} (crease corners) for ball '
         "speed, length and line",
     )
+    a.add_argument(
+        "--no-llm", action="store_true", help="skip the local Ollama coach; use the template report"
+    )
     a.add_argument("--config", type=Path, help="config YAML (default: config/default.yaml)")
     a.add_argument("-v", "--verbose", action="store_true", help="log progress")
     return parser
@@ -71,77 +68,26 @@ def load_calibration(path: Path) -> PitchCalibration:
 
 
 def analyze(args: argparse.Namespace) -> int:
-    """Run the ``analyze`` command."""
+    """Run the ``analyze`` command (no web app or database needed)."""
     settings = load_settings(args.config) if args.config else load_settings()
-    front = extract_pose(
-        args.video,
-        settings,
+    calib = load_calibration(args.calib) if args.calib else None
+    points = [list(p) for p in calib.image_points] if calib else None
+    options = PipelineOptions(
         backend=args.backend,
         allow_low_fps=args.allow_low_fps,
         bowler_track_id=args.bowler_track_id,
         pose_json=args.pose_from_json,
         bowling_arm=args.bowling_arm,
+        calibration_points=points,
+        use_llm=not args.no_llm,
     )
-    calibration = load_calibration(args.calib) if args.calib else None
-    session = analyze_session(front, settings, calibration=calibration)
     out: Path = args.out
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "pose.json").write_text(front.sequence.model_dump_json(), encoding="utf-8")
-
-    cleaned = clean_sequence(front.sequence, settings.pose)
-    segments = [
-        OverlaySegment(start=w.start, stop=w.stop, phases=d.phases, legality=d.legality)
-        for w, d in zip(session.windows, session.deliveries, strict=True)
-    ]
-    overlay = render_overlay(args.video, cleaned, segments, out / "overlay.mp4", settings.render)
-    painter = OverlayPainter(cleaned, segments, settings.render)
-    report_deliveries = []
-    for i, (seg, delivery) in enumerate(zip(segments, session.deliveries, strict=True)):
-        keyframes = export_keyframes(
-            args.video, painter, seg, out / "keyframes" / f"delivery_{i + 1:02d}", settings.render
-        )
-        clip_seq = sub_sequence(cleaned, session.windows[i])
-        report_deliveries.append(
-            ReportDelivery(index=i, analysis=delivery, sequence=clip_seq, keyframes=keyframes)
-        )
-    report = build_report(
-        ReportInput(
-            video_name=args.video.name,
-            created=datetime.now(),
-            view=front.sequence.view,
-            bowling_arm=front.sequence.bowling_arm,
-            fps=front.video.fps,
-            quality_warnings=front.warnings,
-            deliveries=report_deliveries,
-        ),
-        out / "report.pdf",
-        out / "charts",
-        settings.legality.elbow_extension_threshold_deg,
-    )
-    result = {
-        "video": front.video.model_dump(),
-        "backend": front.backend,
-        "bowler_track_id": front.bowler_track_id,
-        "view": front.sequence.view,
-        "bowling_arm": front.sequence.bowling_arm,
-        "quality_warnings": front.warnings,
-        "deliveries": [
-            {"clip": w.model_dump(), **d.model_dump(mode="json")}
-            for w, d in zip(session.windows, session.deliveries, strict=True)
-        ],
-        "fatigue": session.fatigue.model_dump(mode="json"),
-        "consistency": session.consistency.model_dump(mode="json"),
-        "artifacts": {
-            "overlay": overlay.name,
-            "report": report.name,
-            "pose": "pose.json",
-            "keyframes": "keyframes",
-        },
-    }
-    (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    n = len(session.deliveries)
+    result = run_pipeline(args.video, out, settings, session_id=out.name, options=options)
+    n = len(result.deliveries)
     print(f"Analysed {n} deliver{'y' if n == 1 else 'ies'}; results in {out}")
-    for warning in front.warnings:
+    if result.coach_note:
+        print(f"coach: {result.coach_note}", file=sys.stderr)
+    for warning in result.quality_warnings:
         print(f"warning: {warning}", file=sys.stderr)
     return 0
 

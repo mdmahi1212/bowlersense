@@ -52,7 +52,8 @@ from bowlsense.render.report_pdf import (
     ReportInput,
     build_report,
 )
-from bowlsense.schemas import FramePose, PhaseEvents, PoseSequence
+from bowlsense.schemas import PhaseEvents, PoseSequence
+from synth.sessions import multi_ball_session
 from synth.skeleton_gen import SynthParams, SynthResult, generate, render_to_video
 
 logging.getLogger("bowlsense.phases.heuristic").setLevel(logging.ERROR)
@@ -74,27 +75,14 @@ def _assert_browser_ready(path: Path) -> None:
 def _three_balls() -> tuple[PoseSequence, list[SynthResult], list[int]]:
     """Three synthetic deliveries with 2 s standing still between them (walking back)."""
     specs = [(8.0, 8.0), (22.0, 8.0), (8.0, 30.0)]  # (elbow extension, knee collapse)
-    parts = [
-        generate(
+    return multi_ball_session(
+        [
             SynthParams(
                 fps=FPS, height_px=300, seed=k, elbow_extension_deg=e, knee_flex_change_deg=kc
             )
-        )
-        for k, (e, kc) in enumerate(specs)
-    ]
-    frames: list[FramePose] = []
-    releases = []
-    for j, r in enumerate(parts):
-        src = list(r.sequence.frames)
-        if j < len(parts) - 1:
-            src += [src[-1]] * (2 * FPS)
-        off = len(frames)
-        releases.append(off + r.phases.release)
-        frames += [
-            FramePose(frame_idx=off + i, t=(off + i) / FPS, keypoints=f.keypoints)
-            for i, f in enumerate(src)
+            for k, (e, kc) in enumerate(specs)
         ]
-    return parts[0].sequence.model_copy(update={"frames": frames}), parts, releases
+    )
 
 
 @pytest.fixture(scope="module")
@@ -319,13 +307,21 @@ def test_gate_cli_three_ball_session(
 ) -> None:
     video, pose, releases = three_ball_clip
     out = tmp_path / "out"
-    assert cli_main(["analyze", str(video), "--out", str(out), "--pose-from-json", str(pose)]) == 0
+    assert (
+        cli_main(
+            ["analyze", str(video), "--out", str(out), "--pose-from-json", str(pose), "--no-llm"]
+        )
+        == 0
+    )
     result = json.loads((out / "result.json").read_text(encoding="utf-8"))
     assert result["view"] == "side" and len(result["deliveries"]) == 3
     balls = result["deliveries"]
-    assert all(abs(b["clip"]["release"] - t) <= 2 for b, t in zip(balls, releases, strict=True))
+    assert all(
+        abs(b["clip_start"] + b["phases"]["release"] - t) <= 2
+        for b, t in zip(balls, releases, strict=True)
+    )
     assert [b["legality"]["flagged"] for b in balls] == [False, True, False]
-    assert "KNEE_COLLAPSE" in {f["code"] for f in balls[2]["faults"]["faults"]}
+    assert "KNEE_COLLAPSE" in {f["code"] for f in balls[2]["faults"]}
     assert all(b["phases"]["confidence"] == 1.0 for b in balls)
     _assert_browser_ready(out / "overlay.mp4")
     assert len(pypdf.PdfReader(str(out / "report.pdf")).pages) >= 4

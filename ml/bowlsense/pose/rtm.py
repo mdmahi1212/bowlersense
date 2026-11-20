@@ -57,6 +57,11 @@ def map_halpe26(keypoints: np.ndarray, scores: np.ndarray) -> KeypointMap:
 def _ort_device() -> str:
     import onnxruntime as ort
 
+    from bowlsense.device import gpu_allowed
+
+    if not gpu_allowed():
+        log.info("pose: GPU turned off in settings, using CPU")
+        return "cpu"
     if "CUDAExecutionProvider" in ort.get_available_providers():
         log.info("pose: using CUDA GPU (onnxruntime)")
         return "cuda"

@@ -1,12 +1,13 @@
 """Orchestration: video -> pose sequence (front end) -> per-delivery analysis (modules A-E).
 
-Phase 12 extends this into the full session pipeline (clipping, rendering, coach, PDF).
+``run_pipeline`` is the full session pipeline: clipping, modules A-G, rendering, coach and PDF.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from bowlsense.analysis.alignment import assess_alignment
 from bowlsense.analysis.compare import compare_to_references, consistency, load_references
 from bowlsense.analysis.delivery import assess_ball
-from bowlsense.analysis.fatigue import assess_fatigue, delivery_fatigue_input
+from bowlsense.analysis.fatigue import assess_fatigue, assess_workload, delivery_fatigue_input
 from bowlsense.analysis.faults import assess_faults
 from bowlsense.analysis.injury import assess_injury, injury_features
 from bowlsense.analysis.legality import assess_legality
@@ -23,7 +24,7 @@ from bowlsense.config import Settings
 from bowlsense.detect.ball import YoloBallDetector, track_ball
 from bowlsense.detect.person import select_bowler, track_people_in_video
 from bowlsense.errors import InvalidInputError
-from bowlsense.geometry.angles import keypoint_track
+from bowlsense.geometry.angles import FloatArray, keypoint_track
 from bowlsense.geometry.body import (
     BowlingArmResult,
     detect_bowling_arm,
@@ -43,14 +44,18 @@ from bowlsense.pose.smoothing import clean_sequence
 from bowlsense.render.clipping import ClipWindow, clip_windows, find_releases, sub_sequence
 from bowlsense.schemas import (
     KEYPOINT_NAMES,
+    AngleSeries,
     Arm,
     BallTrack,
     ConsistencyResult,
     DeliveryAnalysis,
+    DeliveryMetrics,
     DeliveryTypeResult,
     FatigueResult,
     FramePose,
     PoseSequence,
+    SessionResult,
+    WorkloadResult,
 )
 
 log = logging.getLogger(__name__)
@@ -309,3 +314,210 @@ def analyze_session(
         fatigue=fatigue,
         consistency=consistency(deliveries, settings.compare),
     )
+
+
+# --- full session pipeline (Phase 12) -----------------------------------------------------------
+
+ProgressFn = Callable[[float, str], None]
+
+
+class PipelineOptions(BaseModel):
+    """Per-run choices (CLI flags / API session fields)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    backend: str | None = None
+    allow_low_fps: bool = False
+    bowler_track_id: int | None = None
+    pose_json: Path | None = None
+    bowling_arm: Arm | None = None
+    calibration_points: list[list[float]] | None = None
+    use_llm: bool = True
+    recorded_on: date | None = None
+    workload_history: list[tuple[date, int]] | None = None  # None: no bowler profile
+
+
+def _series(name: str, values: FloatArray) -> AngleSeries:
+    return AngleSeries(
+        name=name,
+        values=[float(v) if np.isfinite(v) else None for v in values],
+        frames=list(range(len(values))),
+    )
+
+
+def delivery_angles(seq: PoseSequence) -> list[AngleSeries]:
+    """The charted angle series of one (cleaned) delivery clip."""
+    from bowlsense.analysis.legality import elbow_angles
+    from bowlsense.render.overlay import front_knee_angles
+    from bowlsense.render.report_pdf import trunk_lean
+
+    return [
+        _series("elbow", elbow_angles(seq)),
+        _series("front_knee", front_knee_angles(seq)),
+        _series("trunk_lean", trunk_lean(seq)),
+    ]
+
+
+def delivery_metrics(
+    idx: int,
+    analysis: DeliveryAnalysis,
+    clip: PoseSequence,
+    window: ClipWindow,
+    keyframes: dict[str, str],
+) -> DeliveryMetrics:
+    """Flatten one ``DeliveryAnalysis`` into the ``DeliveryMetrics`` contract."""
+    m = analysis.faults.measurements
+    stride = m.get("OVERSTRIDE", m.get("UNDERSTRIDE"))
+    ball = analysis.ball
+    return DeliveryMetrics(
+        delivery_idx=idx,
+        phases=analysis.phases,
+        action_type=analysis.alignment.action_type,
+        legality=analysis.legality,
+        faults=analysis.faults.faults,
+        technique_score=analysis.faults.technique_score,
+        injury=analysis.injury,
+        speed_kmh=ball.speed_kmh if ball else None,
+        length=ball.length if ball else None,
+        line=ball.line if ball else None,
+        pitch_xy=ball.pitch_xy if ball else None,
+        release_height_pct=m.get("LOW_RELEASE"),
+        stride_pct=stride,
+        angles=delivery_angles(clip),
+        clip_start=window.start,
+        clip_stop=window.stop,
+        alignment=analysis.alignment,
+        fault_measurements=m,
+        not_measured=analysis.faults.not_measured,
+        delivery_type=analysis.delivery_type,
+        release_source=analysis.release_source,
+        ball_notes=ball.notes if ball else [],
+        ball_track=analysis.ball_track,
+        comparisons=analysis.comparisons,
+        keyframes=keyframes,
+    )
+
+
+def similar_actions(deliveries: Sequence[DeliveryAnalysis]) -> list[tuple[str, float]]:
+    """Reference actions by mean similarity over the session, best first."""
+    sims: dict[str, list[float]] = {}
+    for d in deliveries:
+        for c in d.comparisons:
+            sims.setdefault(c.name, []).append(c.similarity_pct)
+    ranked = [(name, round(float(np.mean(v)), 1)) for name, v in sims.items()]
+    return sorted(ranked, key=lambda kv: -kv[1])
+
+
+def run_pipeline(
+    video: Path,
+    out_dir: Path,
+    settings: Settings,
+    *,
+    session_id: str,
+    options: PipelineOptions | None = None,
+    progress: ProgressFn | None = None,
+    track_ball_flight: bool = True,
+) -> SessionResult:
+    """Video -> every artifact (overlay, keyframes, charts, PDF, pose.json, result.json) in
+    ``out_dir`` and the ``SessionResult`` (artifact paths relative to ``out_dir``)."""
+    from bowlsense.coach.llm import generate_report
+    from bowlsense.coach.prompts import summarise_session
+    from bowlsense.geometry.pitch import calibrate
+    from bowlsense.render.keyframes import export_keyframes
+    from bowlsense.render.overlay import OverlayPainter, OverlaySegment, render_overlay
+    from bowlsense.render.report_pdf import ReportDelivery, ReportInput, build_report
+
+    opts = options or PipelineOptions()
+
+    def report(pct: float, stage: str) -> None:
+        log.info("pipeline %3.0f%% %s", pct, stage)
+        if progress is not None:
+            progress(pct, stage)
+
+    report(2, "checking video and estimating pose")
+    front = extract_pose(
+        video, settings, backend=opts.backend, allow_low_fps=opts.allow_low_fps,
+        bowler_track_id=opts.bowler_track_id, pose_json=opts.pose_json,
+        bowling_arm=opts.bowling_arm,
+    )  # fmt: skip
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "pose.json").write_text(front.sequence.model_dump_json(), encoding="utf-8")
+    report(45, "analysing deliveries")
+    points = opts.calibration_points
+    calibration = calibrate([(p[0], p[1]) for p in points]) if points else None
+    session = analyze_session(
+        front, settings, calibration=calibration, track_ball_flight=track_ball_flight
+    )
+    report(65, "rendering overlay video")
+    cleaned = clean_sequence(front.sequence, settings.pose)
+    segments = [
+        OverlaySegment(start=w.start, stop=w.stop, phases=d.phases, legality=d.legality)
+        for w, d in zip(session.windows, session.deliveries, strict=True)
+    ]
+    overlay = render_overlay(video, cleaned, segments, out_dir / "overlay.mp4", settings.render)
+    report(80, "exporting keyframes")
+    painter = OverlayPainter(cleaned, segments, settings.render)
+    report_deliveries, metrics = [], []
+    artifacts = {"overlay": overlay.name, "pose": "pose.json"}
+    for i, (seg, delivery) in enumerate(zip(segments, session.deliveries, strict=True)):
+        folder = out_dir / "keyframes" / f"delivery_{i + 1:02d}"
+        keyframes = export_keyframes(video, painter, seg, folder, settings.render)
+        rel = {ev: p.relative_to(out_dir).as_posix() for ev, p in keyframes.items()}
+        clip = sub_sequence(cleaned, session.windows[i])
+        report_deliveries.append(
+            ReportDelivery(index=i, analysis=delivery, sequence=clip, keyframes=keyframes)
+        )
+        metrics.append(delivery_metrics(i, delivery, clip, session.windows[i], rel))
+    report(88, "writing coach report")
+    seq = front.sequence
+    summary = summarise_session(
+        session.deliveries, session.fatigue, session.consistency, seq.view, seq.bowling_arm,
+        settings,
+    )  # fmt: skip
+    (out_dir / "coach_summary.json").write_text(summary.model_dump_json(), encoding="utf-8")
+    artifacts["coach_summary"] = "coach_summary.json"
+    coach = generate_report(summary, settings.coach, use_llm=opts.use_llm)
+    report(94, "building PDF report")
+    pdf = build_report(
+        ReportInput(
+            video_name=video.name, created=datetime.now(), view=seq.view,
+            bowling_arm=seq.bowling_arm, fps=front.video.fps,
+            quality_warnings=front.warnings, deliveries=report_deliveries,
+            coach_text=coach.text,
+        ),
+        out_dir / "report.pdf", out_dir / "charts",
+        settings.legality.elbow_extension_threshold_deg,
+    )  # fmt: skip
+    artifacts["report"] = pdf.name
+    today = opts.recorded_on or datetime.now(UTC).date()
+    n = len(session.deliveries)
+    workload = (
+        assess_workload(opts.workload_history, today, n, settings.workload)
+        if opts.workload_history is not None
+        else WorkloadResult(balls_this_session=n, note="No bowler profile: workload not tracked.")
+    )
+    result = SessionResult(
+        session_id=session_id,
+        deliveries=metrics,
+        consistency_score=session.consistency.score,
+        fatigue=session.fatigue,
+        workload=workload,
+        similar_pros=similar_actions(session.deliveries),
+        coach_report=coach.text,
+        quality_warnings=front.warnings,
+        artifacts=artifacts,
+        fps=front.video.fps,
+        width=front.video.width,
+        height=front.video.height,
+        frame_count=front.video.frame_count,
+        view=seq.view,
+        bowling_arm=seq.bowling_arm,
+        pose_backend=front.backend,
+        bowler_track_id=front.bowler_track_id,
+        consistency=session.consistency,
+        coach_source=coach.source,
+        coach_note=coach.note,
+    )
+    (out_dir / "result.json").write_text(result.model_dump_json(indent=1), encoding="utf-8")
+    report(100, "done")
+    return result

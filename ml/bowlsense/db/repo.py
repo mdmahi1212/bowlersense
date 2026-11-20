@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as OrmSession
 from bowlsense.db import models as m
 from bowlsense.db.session import immediate, make_sessionmaker
 from bowlsense.errors import DatabaseError, NotFoundError
+from bowlsense.schemas import SessionResult
 from bowlsense.storage import LocalStorage
 
 Status = Literal["queued", "processing", "done", "failed"]
@@ -57,6 +58,16 @@ class SessionRecord(_Record):
     status: Status
     error: str | None
     calibration: list[list[float]] | None
+    options: dict[str, Any] | None = None
+    original_name: str | None = None
+
+
+class DeliveryRef(_Record):
+    """Where a stored delivery lives: its session and index."""
+
+    id: str
+    session_id: str
+    idx: int
 
 
 class JobRecord(_Record):
@@ -158,6 +169,8 @@ class Repository:
         fps: float | None = None,
         view: str | None = None,
         recorded_at: datetime | None = None,
+        options: dict[str, Any] | None = None,
+        original_name: str | None = None,
     ) -> SessionRecord:
         """Create a queued session for a stored file (``video_path`` relative to storage)."""
         with self._tx(write=True) as s:
@@ -170,6 +183,8 @@ class Repository:
                 view=view,
                 recorded_at=recorded_at,
                 status="queued",
+                options=options,
+                original_name=original_name[:255] if original_name else None,
             )
             s.add(row)
             s.flush()
@@ -200,6 +215,14 @@ class Repository:
             s.flush()
             return SessionRecord.model_validate(row)
 
+    def set_session_options(self, session_id: str, options: dict[str, Any]) -> SessionRecord:
+        """Replace a session's pipeline options."""
+        with self._tx(write=True) as s:
+            row = self._get(s, m.Session, "session", session_id)
+            row.options = dict(options)
+            s.flush()
+            return SessionRecord.model_validate(row)
+
     def save_calibration(self, session_id: str, points: list[list[float]]) -> SessionRecord:
         """Store four pitch calibration points ``[[x, y], ...]`` in image pixels."""
         if len(points) != 4 or any(len(p) != 2 for p in points):
@@ -224,6 +247,79 @@ class Repository:
             for table in reversed(m.Base.metadata.sorted_tables):
                 s.execute(table.delete())
         storage.wipe()
+
+    # --- results ---------------------------------------------------------------------------
+
+    def save_results(
+        self,
+        session_id: str,
+        result: SessionResult,
+        *,
+        pdf_path: str | None,
+        overlay_path: str | None,
+    ) -> list[DeliveryRef]:
+        """Replace a session's stored results (deliveries, angle series, faults, summary)."""
+        with self._tx(write=True) as s:
+            session = self._get(s, m.Session, "session", session_id)
+            session.fps, session.view = result.fps, result.view
+            s.execute(delete(m.Delivery).where(m.Delivery.session_id == session_id))
+            s.execute(delete(m.SessionSummary).where(m.SessionSummary.session_id == session_id))
+            refs = []
+            for d in result.deliveries:
+                pitch = d.pitch_xy or (None, None)
+                row = m.Delivery(
+                    session_id=session_id, idx=d.delivery_idx,
+                    phases=d.phases.model_dump(mode="json"), action_type=d.action_type,
+                    speed_kmh=d.speed_kmh, length=d.length, line=d.line,
+                    pitch_x=pitch[0], pitch_y=pitch[1], technique_score=d.technique_score,
+                    injury_overall=d.injury.overall, injury_band=d.injury.band,
+                    legality_flagged=d.legality.flagged,
+                    elbow_extension_deg=d.legality.elbow_extension_deg,
+                )  # fmt: skip
+                row.metrics = [
+                    m.DeliveryMetric(name=a.name, values=a.model_dump(mode="json"))
+                    for a in d.angles
+                ]
+                row.faults = [
+                    m.FaultRow(
+                        code=f.code,
+                        severity=f.severity,
+                        value=f.value,
+                        threshold=f.threshold,
+                        frames=f.frames,
+                    )
+                    for f in d.faults
+                ]
+                s.add(row)
+                s.flush()
+                refs.append(DeliveryRef(id=row.id, session_id=session_id, idx=row.idx))
+            s.add(
+                m.SessionSummary(
+                    session_id=session_id, consistency=result.consistency_score,
+                    fatigue=result.fatigue.model_dump(mode="json"),
+                    workload=result.workload.model_dump(mode="json"),
+                    similar=[list(x) for x in result.similar_pros],
+                    coach_report=result.coach_report, pdf_path=pdf_path,
+                    overlay_path=overlay_path,
+                )
+            )  # fmt: skip
+            return refs
+
+    def list_deliveries(self, session_id: str) -> list[DeliveryRef]:
+        """A session's stored deliveries in order."""
+        with self._tx() as s:
+            self._get(s, m.Session, "session", session_id)
+            rows = s.scalars(
+                select(m.Delivery)
+                .where(m.Delivery.session_id == session_id)
+                .order_by(m.Delivery.idx)
+            ).all()
+            return [DeliveryRef.model_validate(r) for r in rows]
+
+    def get_delivery(self, delivery_id: str) -> DeliveryRef:
+        """Return a delivery's session and index or raise ``NotFoundError``."""
+        with self._tx() as s:
+            return DeliveryRef.model_validate(self._get(s, m.Delivery, "delivery", delivery_id))
 
     # --- jobs ------------------------------------------------------------------------------
 

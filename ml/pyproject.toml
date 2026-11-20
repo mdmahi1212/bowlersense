@@ -31,6 +31,10 @@ files = ["bowlsense", "synth", "train", "tests"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = [
+    # Starlette's TestClient still runs on httpx (used in tests only).
+    "ignore:Using `httpx` with `starlette.testclient`",
+]
 
 [[tool.mypy.overrides]]
 # Third-party packages without type information; our own code stays strict.

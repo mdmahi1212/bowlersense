@@ -81,6 +81,8 @@ class Session(Base):
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="queued")
     error: Mapped[str | None] = mapped_column(Text)
     calibration: Mapped[list[Any] | None] = mapped_column(JSON)
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # per-run pipeline choices
+    original_name: Mapped[str | None] = mapped_column(String(255))  # display only, never a path
 
     bowler: Mapped[Bowler | None] = relationship(back_populates="sessions")
     jobs: Mapped[list[Job]] = relationship(cascade="all, delete-orphan", passive_deletes=True)

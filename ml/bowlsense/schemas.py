@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -320,7 +321,12 @@ class DeliveryAnalysis(_Model):
 
 
 class DeliveryMetrics(_Model):
-    """Everything measured for one delivery."""
+    """Everything measured for one delivery.
+
+    Phase frames and ``angles`` frames are numbered within the delivery's clip;
+    ``clip_start`` is the clip's first frame in the source video. ``None`` = not measurable
+    from this camera view.
+    """
 
     delivery_idx: int = Field(ge=0)
     phases: PhaseEvents
@@ -333,9 +339,20 @@ class DeliveryMetrics(_Model):
     length: str | None = None
     line: str | None = None
     pitch_xy: tuple[float, float] | None = None
-    release_height_pct: float
-    stride_pct: float
+    release_height_pct: float | None = None
+    stride_pct: float | None = None
     angles: list[AngleSeries]
+    clip_start: int = Field(default=0, ge=0)
+    clip_stop: int | None = None
+    alignment: AlignmentResult | None = None
+    fault_measurements: dict[str, float] = Field(default_factory=dict)
+    not_measured: dict[str, str] = Field(default_factory=dict)
+    delivery_type: DeliveryTypeResult | None = None
+    release_source: Literal["rules", "model"] = "rules"
+    ball_notes: list[str] = Field(default_factory=list)
+    ball_track: BallTrack | None = None
+    comparisons: list[ReferenceComparison] = Field(default_factory=list)
+    keyframes: dict[str, str] = Field(default_factory=dict)  # event -> artifact path
 
 
 class FatigueInput(_Model):
@@ -384,17 +401,32 @@ class WorkloadResult(_Model):
 
 
 class SessionResult(_Model):
-    """The full result of analysing one session (one video)."""
+    """The full result of analysing one session (one video).
+
+    ``consistency_score`` is ``None`` with fewer than 2 deliveries. ``artifacts`` maps names
+    (overlay, report, pose, keyframe paths) to paths relative to the output location.
+    """
 
     session_id: str
     deliveries: list[DeliveryMetrics]
-    consistency_score: float = Field(ge=0, le=100)
+    consistency_score: float | None = Field(default=None, ge=0, le=100)
     fatigue: FatigueResult
     workload: WorkloadResult
     similar_pros: list[tuple[str, float]]
     coach_report: str
     quality_warnings: list[str]
     artifacts: dict[str, str]
+    fps: float = Field(gt=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    frame_count: int = Field(ge=0)
+    view: View
+    bowling_arm: Arm
+    pose_backend: str = ""
+    bowler_track_id: int | None = None
+    consistency: ConsistencyResult | None = None
+    coach_source: Literal["ollama", "template"] = "template"
+    coach_note: str = ""
 
 
 EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
@@ -425,23 +457,44 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
 )
 
 
-def json_schema() -> dict[str, Any]:
-    """Return one JSON Schema document with every exported model under ``$defs``."""
+def json_schema(
+    models: Sequence[type[BaseModel]] = EXPORTED_MODELS,
+    mode: Literal["validation", "serialization"] = "validation",
+) -> dict[str, Any]:
+    """One JSON Schema document with every model under ``$defs`` (and listed in
+    ``properties`` so code generators emit them all)."""
     defs: dict[str, Any] = {}
-    for model in EXPORTED_MODELS:
-        schema = model.model_json_schema(ref_template="#/$defs/{model}")
+    for model in models:
+        schema = model.model_json_schema(ref_template="#/$defs/{model}", mode=mode)
         defs.update(schema.pop("$defs", {}))
         defs[model.__name__] = schema
+    if mode == "serialization":  # every field is always present in what the API sends
+        for d in defs.values():
+            if "properties" in d:
+                d["required"] = list(d["properties"])
+    names = sorted(m.__name__ for m in models)
     return {
         "title": "BowlSense",
+        "type": "object",
+        "properties": {n: {"$ref": f"#/$defs/{n}"} for n in names},
         "$defs": dict(sorted(defs.items())),
     }
 
 
-def export_json_schema(path: Path) -> Path:
-    """Write the JSON Schema to ``path`` (parent folders are created) and return it."""
+def export_json_schema(path: Path, *, with_api: bool = False) -> Path:
+    """Write the JSON Schema to ``path`` (parent folders are created) and return it.
+
+    ``with_api`` adds the HTTP request/response bodies and uses serialization mode (what the
+    API sends), for generating the web app's TypeScript types.
+    """
+    models: Sequence[type[BaseModel]] = EXPORTED_MODELS
+    mode: Literal["validation", "serialization"] = "validation"
+    if with_api:
+        from bowlsense.api import API_MODELS
+
+        models, mode = (*EXPORTED_MODELS, *API_MODELS), "serialization"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(json_schema(), indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(json_schema(models, mode), indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -449,8 +502,9 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entry point: export the JSON Schema."""
     parser = argparse.ArgumentParser(description="Export BowlSense JSON Schema")
     parser.add_argument("--out", type=Path, default=Path("schema/bowlsense.schema.json"))
+    parser.add_argument("--with-api", action="store_true", help="include API bodies (web types)")
     args = parser.parse_args(argv)
-    print(export_json_schema(args.out))
+    print(export_json_schema(args.out, with_api=args.with_api))
 
 
 if __name__ == "__main__":

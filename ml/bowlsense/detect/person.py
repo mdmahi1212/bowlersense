@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -59,8 +58,12 @@ def _new_tracker_model(weights: Path) -> Any:
     return YOLO(str(weights))
 
 
-@lru_cache(maxsize=1)
 def _device() -> str:
+    from bowlsense.device import gpu_allowed
+
+    if not gpu_allowed():
+        log.info("detector: GPU turned off in settings, using CPU")
+        return "cpu"
     try:
         import torch
 

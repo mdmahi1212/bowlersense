@@ -303,13 +303,18 @@ def test_gate_cli_analyze_with_pose_json(
     """Phase 7 gate: `cli analyze` runs on the synthetic video with --pose-from-json."""
     video, pose, r = synth_clip
     out = tmp_path / "out"
-    assert cli_main(["analyze", str(video), "--out", str(out), "--pose-from-json", str(pose)]) == 0
+    assert (
+        cli_main(
+            ["analyze", str(video), "--out", str(out), "--pose-from-json", str(pose), "--no-llm"]
+        )
+        == 0
+    )
     result = json.loads((out / "result.json").read_text(encoding="utf-8"))
-    assert result["backend"] == "pose-json" and result["bowler_track_id"] is None
+    assert result["pose_backend"] == "pose-json" and result["bowler_track_id"] is None
     assert result["view"] == "side" and result["bowling_arm"] == "right"
     assert len(result["deliveries"]) == 1
     phases = result["deliveries"][0]["phases"]
-    start = result["deliveries"][0]["clip"]["start"]  # phases are numbered within the clip
+    start = result["deliveries"][0]["clip_start"]  # phases are numbered within the clip
     for event in ("bfc", "ffc", "release"):
         assert abs(start + phases[event] - getattr(r.phases, event)) <= 2
     assert result["deliveries"][0]["legality"]["flagged"] is True
