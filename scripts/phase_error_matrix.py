@@ -16,11 +16,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
-from bowlsense.config import load_settings  # noqa: E402
-from bowlsense.geometry.body import estimate_height_px  # noqa: E402
-from bowlsense.phases.heuristic import detect_phases  # noqa: E402
-from bowlsense.pose.smoothing import clean_sequence  # noqa: E402
-from synth.skeleton_gen import SynthParams, generate  # noqa: E402
+from bowlsense.config import load_settings
+from bowlsense.geometry.body import estimate_height_px
+from bowlsense.phases.heuristic import detect_phases
+from bowlsense.pose.smoothing import clean_sequence
+from synth.skeleton_gen import SynthParams, generate
 
 EVENTS = (
     "run_up_start",

@@ -47,3 +47,6 @@ Thumbs.db
 
 # Training data extracted from the dataset (large, reproducible)
 data/training/
+
+# Local settings-page overrides (per machine)
+data/settings.json

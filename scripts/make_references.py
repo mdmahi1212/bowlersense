@@ -11,11 +11,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ml"))
 
-from bowlsense.analysis.compare import ReferenceAction  # noqa: E402
-from bowlsense.config import load_settings  # noqa: E402
-from bowlsense.pose.smoothing import clean_sequence  # noqa: E402
-from bowlsense.schemas import FramePose, PhaseEvents  # noqa: E402
-from synth.skeleton_gen import SynthParams, generate  # noqa: E402
+from bowlsense.analysis.compare import ReferenceAction
+from bowlsense.config import load_settings
+from bowlsense.pose.smoothing import clean_sequence
+from bowlsense.schemas import FramePose, PhaseEvents
+from synth.skeleton_gen import SynthParams, generate
 
 REFERENCES = {
     "side_on": (

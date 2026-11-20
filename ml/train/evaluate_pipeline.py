@@ -1,5 +1,6 @@
-"""Score the existing rule-based pipeline on real footage against the dataset labels:
-bowling-arm detection vs bowler hand, and camera-view estimation vs bowling direction.
+"""Score the pipeline on real footage against the dataset labels: bowling-arm detection vs
+bowler hand (peak wrist speed, and the elbow raised at the learned release when the phase
+model is trained), and camera-view estimation vs bowling direction.
 (The rule-based release detector is scored in ``train.train_release``.)
 
 Run: ml/.venv/Scripts/python -m train.evaluate_pipeline
@@ -15,8 +16,9 @@ from pathlib import Path
 
 from bowlsense.config import load_settings
 from bowlsense.errors import BowlSenseError
-from bowlsense.geometry.body import detect_bowling_arm
+from bowlsense.geometry.body import detect_bowling_arm, detect_bowling_arm_at_release
 from bowlsense.io.quality import estimate_view
+from bowlsense.phases.model import load_phase_model
 from bowlsense.pose.smoothing import clean_sequence
 from train.extract_poses import DEFAULT_OUT, load_extracted
 from train.train_release import REPORTS
@@ -39,6 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings()
     arm_hits, arm_n, arm_fail = 0, 0, 0
     arm_by_hand: Counter[tuple[str, str]] = Counter()
+    weights = settings.storage.models_path / settings.phases.model_file
+    phase_model = load_phase_model(weights) if weights.is_file() else None
+    elbow_hits, elbow_n = 0, 0
     view_conf: Counter[tuple[str, str]] = Counter()
     for item in load_extracted(args.data):
         d = item.delivery
@@ -48,6 +53,14 @@ def main(argv: list[str] | None = None) -> int:
         except BowlSenseError:
             arm_fail += 1
             continue
+        if d.bowler_hand is not None and phase_model is not None:
+            best = max(
+                (phase_model.predict(seq.model_copy(update={"bowling_arm": a}))
+                 for a in ("right", "left")),
+                key=lambda pr: pr.release_confidence,
+            )  # fmt: skip
+            elbow_n += 1
+            elbow_hits += detect_bowling_arm_at_release(seq, best.release).arm == d.bowler_hand
         if d.bowler_hand is not None:
             arm_n += 1
             arm_hits += arm == d.bowler_hand
@@ -65,6 +78,11 @@ def main(argv: list[str] | None = None) -> int:
             "n": arm_n,
             "wrist_never_seen": arm_fail,
             "by_true_hand(true, predicted)": {f"{t}->{p}": n for (t, p), n in arm_by_hand.items()},
+        },
+        "bowling_arm_elbow_at_learned_release": {
+            "accuracy": elbow_hits / elbow_n if elbow_n else None,
+            "n": elbow_n,
+            "note": "the pipeline's method when phases.use_model is on (all clips, not only test)",
         },
         "camera_view": {
             "accuracy": view_hits / view_n if view_n else None,

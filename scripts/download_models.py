@@ -2,7 +2,9 @@
 
 After this has run once, BowlSense works with the network unplugged
 (``BOWLSENSE_OFFLINE=1``). Files that already exist are skipped (``--force`` re-downloads).
-SHA-256 hashes are written to ``models/MANIFEST.json``.
+SHA-256 hashes are written to ``models/MANIFEST.json``. Then, if Ollama is installed, it pulls
+the coach model from ``config/default.yaml`` (``--no-llm`` skips that; the coach falls back to
+the rule-based report without it).
 
 Run: ml/.venv/Scripts/python scripts/download_models.py     (Linux: ml/.venv/bin/python)
 """
@@ -13,6 +15,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -106,10 +109,38 @@ def fetch(asset: Asset, force: bool) -> Path:
     return target
 
 
+def coach_model() -> str:
+    """The Ollama model named in the config (``coach.model``)."""
+    sys.path.insert(0, str(ROOT / "ml"))
+    from bowlsense.config import load_settings
+
+    return load_settings().coach.model
+
+
+def pull_ollama_model(model: str) -> bool:
+    """``ollama pull <model>`` if the Ollama CLI is installed; explain otherwise."""
+    exe = shutil.which("ollama")
+    if exe is None:
+        print(
+            f"Ollama isn't installed; the coach uses its rule-based report. To enable the AI "
+            f"coach later: install Ollama, then run `ollama pull {model}`."
+        )
+        return True
+    print(f"Pulling the coach model with Ollama: {model} (several GB, one time)")
+    if subprocess.call([exe, "pull", model]) != 0:
+        print(
+            f"  `ollama pull {model}` failed. Is the Ollama app running? Retry it by hand.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Download every asset and write the manifest."""
+    """Download every asset, write the manifest, then pull the Ollama coach model."""
     parser = argparse.ArgumentParser(description="Download BowlSense model weights")
     parser.add_argument("--force", action="store_true", help="re-download existing files")
+    parser.add_argument("--no-llm", action="store_true", help="don't pull the Ollama model")
     args = parser.parse_args(argv)
     MODELS.mkdir(parents=True, exist_ok=True)
     print(f"Downloading model weights into {MODELS}")
@@ -137,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(failed)} download(s) failed: {', '.join(failed)}", file=sys.stderr)
         return 1
     print("All model weights present. BowlSense can now run offline.")
+    if not args.no_llm and not pull_ollama_model(coach_model()):
+        return 1
     return 0
 
 

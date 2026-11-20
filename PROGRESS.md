@@ -1,5 +1,66 @@
 # BowlSense — Progress
 
+## Status: all 16 phases complete ✅ (2026-11-20)
+
+`python scripts/setup.py` → `python scripts/download_models.py` → `python run.py` gives a working local app. `scripts/check.py` runs:
+- URL check, ruff, black and mypy (ml, the launcher and the scripts);
+- pytest (with the `BOWLSENSE_OFFLINE=1` gate);
+- web lint and format, build, Vitest, and the Playwright smoke test.
+
+All pass. Known limitations are listed at the end of README.md.
+
+## Phase 16: Launcher, setup, offline gate, README, evaluation ✅ (2026-11-20)
+
+- **`run.py`** (Windows/Linux/macOS): one command.
+  - Re-launches itself in `ml/.venv`.
+  - Disables telemetry (`YOLO_OFFLINE`, `NEXT_TELEMETRY_DISABLED`).
+  - Migrates the DB once, *before* the API and worker start, so they never race on a fresh database.
+  - Reports model files and Ollama status (running / model not pulled / not running → template coach).
+  - Builds the web app on first run.
+  - Starts the API, worker and `next start` bound to 127.0.0.1, waits for both to answer, and opens the browser.
+  - Ctrl+C or any child exiting stops the whole process tree.
+  - Busy ports: it prints "Port 8000 is in use; the API will use port 8001 instead" and hands the port to the web app at run time. Verified by starting two launchers at once: the second got 8001/3001, and its page pointed at API 8001.
+  - Options: `--no-browser`, `--dev`, `--offline`, `--api-port`, `--web-port`.
+- **`scripts/setup.py`**: venv + pinned packages (uv if present, else venv + pip), import check, DB migration, `npm ci` + build (`--dev`, `--no-web`). Verified with the uv path.
+- **`scripts/download_models.py`** now also runs `ollama pull <coach.model>` when Ollama is installed (`--no-llm` skips it), and explains how to enable the coach later if not.
+- **Offline gate**: `test_offline_suite.py` runs `test_pipeline_synthetic.py`, `test_api.py` and `test_offline.py` in a subprocess with `BOWLSENSE_OFFLINE=1`. `conftest.py` installs the guard for the whole session when the flag is set. The Playwright stack and the two-process test also run with the flag on.
+- **`scripts/evaluate.py`** prints and saves (`data/eval/report.md`, `report.json`) the table below:
+  - **Synthetic benchmark** (exact ground truth, fixed seeds): phase error, 10 % dropout, arm, legality, counter-rotation, knee, stride, ball speed.
+  - **Real footage**: from the training reports. `train/evaluate_pipeline.py` now also scores the learned-release arm method.
+  - **Pose PCK@0.2**: when `data/eval/pose_labels.json` exists.
+- **README.md**:
+  - setup (Windows + Linux/macOS), hardware, Ollama, the one-time download, running offline;
+  - recording tips, CLI and web usage;
+  - two Mermaid diagrams (system and pipeline), the module table, development notes, limitations and disclaimers.
+- **`.env.example`** lists every environment variable. `data/settings.json` is gitignored.
+- Real LLM check: Ollama is installed on this machine with only `gemma4:26b` pulled. A real report request with it timed out after 900 s on CPU and fell back to the template report, as designed. The live-LLM path is therefore verified against mocks only; a small model (`qwen2.5:3b`, set on the Settings page) is the practical choice for CPU.
+
+### Evaluation (`scripts/evaluate.py`)
+
+| Metric                                       | Value                 | n   | Notes                                      |
+|----------------------------------------------|-----------------------|-----|--------------------------------------------|
+| Phase error: bfc (frames)                    | 0.79 mean / 2 max     | 48  | noise 2 px; 120/240 fps; side+front; L+R   |
+| Phase error: ffc (frames)                    | 1.25 mean / 3 max     | 48  | noise 2 px; 120/240 fps; side+front; L+R   |
+| Phase error: arm_horizontal (frames)         | 0.25 mean / 1 max     | 48  | noise 2 px; 120/240 fps; side+front; L+R   |
+| Phase error: release (frames)                | 2.38 mean / 7 max     | 48  | noise 2 px; 120/240 fps; side+front; L+R   |
+| Phase error with 10% dropout (frames)        | 1.07 mean / 7 max     | 192 | all four events                            |
+| Bowling-arm detection (synthetic)            | 100.0%                | 48  | wrist speed                                |
+| Elbow extension (legality) MAE (deg)         | 1.95 (max 6.1)        | 18  | side view                                  |
+| Counter-rotation MAE (deg)                   | 1.73 (max 4.3)        | 12  | front view                                 |
+| Front-knee collapse MAE (deg)                | 6.03 (max 9.8)        | 12  | side view                                  |
+| Stride length MAE (% height)                 | 0.50 (max 0.9)        | 12  | side view                                  |
+| Ball speed error (%)                         | 1.85 (max 3.8)        | 12  | calibrated; side-on + 11 deg; 0.5 px noise |
+| Release within +-1 frame (learned BiLSTM)    | 75.3% (MAE 43 ms)     | 255 | real test split, 3 s crops                 |
+| Release within +-1 frame (rule-based)        | 48.2% (MAE 162 ms)    | 255 | real test split, 3 s crops                 |
+| Bowling arm, real (elbow at learned release) | 84.5%                 | 278 | phases.use_model on                        |
+| Bowling arm, real (peak wrist speed)         | 59.0%                 | 278 | default rules                              |
+| Camera view (real)                           | 93.2%                 | 279 | all clips                                  |
+| Pace vs spin (real)                          | 63.1% acc / 62.6% bal | 84  | BiGRU, end to end                          |
+| Pose PCK@0.2                                 | n/a                   | 0   | no labels in data/eval/pose_labels.json    |
+
+- The release error is larger than the other events at 240 fps (more frames for the same time). At 120 fps the Phase 4 gate (±2 frames) holds.
+- Knee-collapse MAE (6°) reflects the knee track's smoothing near release. The fault threshold (20°) is well above it.
+
 ## Phase 15: Image mode + learned phase model flag + optional 3D lift ✅ (2026-11-20)
 
 - **Image mode** (`image_mode.py`, `POST /analyze/image`, and the upload page when a JPG/PNG is dropped):
@@ -344,4 +405,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: Phase 16: run.py launcher, setup, offline gate, README, evaluate.py.
+**Next**: nothing required. Optional: pull a small Ollama model (e.g. `qwen2.5:3b`) for the live AI coach on CPU, and add hand-labelled frames to `data/eval/pose_labels.json` for a pose PCK figure.

@@ -16,6 +16,13 @@ from bowlsense.storage import LocalStorage
 REAL_DATA_DIR = Path(__file__).parent / "data" / "real"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def offline_when_requested() -> Iterator[None]:
+    """With ``BOWLSENSE_OFFLINE=1`` the whole test session runs behind the network guard."""
+    offline.enable_if_requested()
+    yield
+
+
 @pytest.fixture(scope="session")
 def settings() -> Settings:
     """Default settings from config/default.yaml."""

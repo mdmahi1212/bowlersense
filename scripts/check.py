@@ -33,6 +33,26 @@ def main() -> None:
     run("ruff", [py, "-m", "ruff", "check", "."], ML_DIR)
     run("black", [py, "-m", "black", "--check", "--quiet", "."], ML_DIR)
     run("mypy", [py, "-m", "mypy"], ML_DIR)
+    tools = ["../run.py", "../scripts"]  # launcher + scripts, linted with ml/pyproject.toml
+    run("ruff (scripts)", [py, "-m", "ruff", "check", "--config", "pyproject.toml", *tools], ML_DIR)
+    run(
+        "black (scripts)",
+        [py, "-m", "black", "--config", "pyproject.toml", "--check", "--quiet", *tools],
+        ML_DIR,
+    )
+    run(
+        "mypy (launcher)",
+        [
+            py,
+            "-m",
+            "mypy",
+            "../run.py",
+            "../scripts/setup.py",
+            "../scripts/evaluate.py",
+            "../scripts/download_models.py",
+        ],
+        ML_DIR,
+    )
     run(
         "pytest",
         [
