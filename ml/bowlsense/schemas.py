@@ -240,13 +240,14 @@ class InjuryFeatures(_Model):
 class LegalityResult(_Model):
     """Elbow-extension screening result.
 
-    ``verdict`` is the plain answer shown to the user: ``legal`` (elbow straightened no more
-    than the threshold), ``not_legal`` (more than the threshold) or ``cannot_judge`` (the clip
-    can't support a measurement; see ``not_screened_reason``). ``verdict_text`` says it in words.
+    ``verdict`` is the plain answer shown to the user and always follows the measured angle:
+    ``legal`` (elbow straightened no more than the threshold) or ``not_legal`` (more).
+    ``cannot_judge`` only appears in results saved by older versions and is upgraded on load.
+    ``verdict_text`` says it in words.
 
     ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
-    camera view, phase events out of order, implausible value); then ``flagged`` is always
-    False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
+    camera view, phase events out of order, implausible value); the verdict is then
+    unverified and ``not_screened_reason`` says why.
     """
 
     elbow_extension_deg: float
@@ -259,6 +260,25 @@ class LegalityResult(_Model):
     confidence: Confidence
     note: str = "2D video screening only. The official ICC test uses 3D motion capture."
     front_foot_no_ball: bool | None = None
+
+    @model_validator(mode="after")
+    def _verdict_from_angle(self) -> LegalityResult:
+        """Upgrade old "can't judge" results: the verdict follows the angle, marked unverified."""
+        if self.verdict == "cannot_judge":
+            flagged = self.elbow_extension_deg > self.threshold_deg
+            word = "Not legal" if flagged else "Legal"
+            rel = "more than" if flagged else "within"
+            why = (self.not_screened_reason or "Unverified: the clip can't be measured reliably.")
+            why = why.replace("Not screened:", "Unverified:")
+            self.flagged = flagged
+            self.verdict = "not_legal" if flagged else "legal"
+            self.verdict_text = (
+                f"{word}: the elbow straightened {self.elbow_extension_deg:.1f} deg, {rel} the "
+                f"{self.threshold_deg:.0f} deg limit. {why} Treat this as a rough guide and "
+                "re-film side-on at 120+ fps to confirm."
+            )
+            self.not_screened_reason = why
+        return self
 
 
 ActionType = Literal["side_on", "semi_open", "front_on", "mixed", "unknown"]

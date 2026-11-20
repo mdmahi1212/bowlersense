@@ -121,7 +121,7 @@ def test_limit_words() -> None:
     )
 
 
-def test_unscreened_summary_has_no_elbow_numbers() -> None:
+def test_unscreened_summary_is_marked_unverified() -> None:
     s = _settings()
     bad = analyze_delivery(generate(SynthParams(fps=120.0, view="front")).sequence, s)
     assert not bad.legality.screened
@@ -129,8 +129,9 @@ def test_unscreened_summary_has_no_elbow_numbers() -> None:
         [bad], assess_fatigue([bad.fatigue_input], s.fatigue), consistency([bad], s.compare),
         "front", "right", s,
     )  # fmt: skip
-    assert summ.legality_screened == 0 and summ.legality_max_extension_deg == 0.0
-    assert "deg" not in summ.legality_note and "not screened" in summ.legality_note
+    assert summ.legality_screened == 0
+    assert summ.legality_max_extension_deg == bad.legality.elbow_extension_deg
+    assert "Unverified" in summ.legality_note
 
 
 def test_system_prompt_rules() -> None:
@@ -273,9 +274,9 @@ def test_chat_offline_answer_matches_question() -> None:
         coach_reply(_summary(), [], "  ", cfg)
 
 
-def test_template_says_not_screened_instead_of_within_limit() -> None:
+def test_template_marks_unverified_verdict() -> None:
     s = _summary().model_copy(
-        update={"legality_screened": 0, "legality_flagged": 0, "legality_note": "Not screened: x."}
+        update={"legality_screened": 0, "legality_flagged": 0, "legality_note": "Unverified: x."}
     )
     text = template_report(s)
-    assert "Legality: CAN'T JUDGE. Not screened: x." in text and "LEGAL (" not in text
+    assert "Legality: LEGAL (" in text and "unverified" in text and "Unverified: x." in text

@@ -88,10 +88,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           {open && (
             <div className="leading-tight">
-              <p className="font-display text-sm font-bold uppercase tracking-[0.14em]">
+              <p className="text-[15px] font-semibold">
                 BowlSense
               </p>
-              <p className="text-[10px] uppercase tracking-widest text-muted">Biomechanics lab</p>
+              <p className="text-xs text-muted">Biomechanics lab</p>
             </div>
           )}
         </div>
@@ -99,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {NAV.map((group) => (
             <div key={group.section} className="mb-3">
               {open && (
-                <p className="px-4 pb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted/70">
+                <p className="px-4 pb-1 text-xs text-muted/70">
                   {group.section}
                 </p>
               )}

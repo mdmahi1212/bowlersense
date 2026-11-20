@@ -4,9 +4,9 @@
    Risk colours are always paired with text labels. */
 :root {
   --background: #07090a;
-  --surface: #0e1314;
+  --surface: #0d1112;
   --surface-2: #151c1e;
-  --border: #22302f;
+  --border: #1d2627;
   --foreground: #e9efe7;
   --muted: #8a9a93;
   --accent: #c6f432;
@@ -37,10 +37,7 @@
 }
 
 body {
-  background:
-    radial-gradient(1200px 500px at 70% -10%, rgba(198, 244, 50, 0.06), transparent 60%),
-    repeating-linear-gradient(90deg, transparent 0 119px, rgba(255, 255, 255, 0.018) 119px 120px),
-    var(--background);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
 }

@@ -5,7 +5,7 @@ import { use, useCallback, useMemo, useState } from "react";
 import { AngleChart } from "@/components/AngleChart";
 import { BodyRiskMap } from "@/components/BodyRiskMap";
 import { FaultList } from "@/components/FaultList";
-import { VERDICT_STYLE, VerdictWord } from "@/components/LegalityVerdict";
+import { VerdictWord } from "@/components/LegalityVerdict";
 import { RiskGauge } from "@/components/RiskGauge";
 import { StudioPlayer, phaseAt, type SeekRequest } from "@/components/StudioPlayer";
 import {
@@ -22,10 +22,10 @@ import { api, errorText, fileUrl } from "@/lib/api";
 import { type Arm, frameAngles, frameIndex } from "@/lib/pose";
 import type { DeliveryOut, PoseSequence } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
-import { cn, fmt } from "@/lib/utils";
+import { SectionHead } from "@/components/ui/SectionHead";
+import { cleanName, cn, fmt } from "@/lib/utils";
 
-const TABS = ["Release", "Live", "Mechanics", "Legality", "Faults", "Load"] as const;
-type Tab = (typeof TABS)[number];
+type Tab = "Legality" | "Joint angles" | "Mechanics" | "Faults" | "Injury load" | "Sequence";
 const JOINTS = [
   ["bowling_elbow", "Elbow"],
   ["front_knee", "Front knee"],
@@ -70,7 +70,7 @@ function Workspace({
   const frames = useMemo(() => (pose.data ? frameIndex(pose.data) : null), [pose.data]);
   const [frame, setFrame] = useState(d.phases.release);
   const [seek, setSeek] = useState<SeekRequest | null>(null);
-  const [tab, setTab] = useState<Tab>("Release");
+  const [tab, setTab] = useState<Tab>("Legality");
   const [joint, setJoint] = useState<(typeof JOINTS)[number][0]>("bowling_elbow");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,64 +119,63 @@ function Workspace({
   const pos = ids.indexOf(out.delivery_id);
   const rel = frameAngles(frames?.get(d.clip_start + d.phases.release), arm);
   const bm = new Map(d.biomechanics.map((m) => [m.key, m.value]));
-  const verdict = VERDICT_STYLE[d.legality.verdict];
   const src = api.videoUrl(out.session_id);
   const releaseMarkers = [
     { frame: d.phases.ffc, label: "FFC" },
     { frame: d.phases.release, label: "REL" },
   ];
 
+  const tabs: Tab[] = [
+    "Legality",
+    "Joint angles",
+    "Mechanics",
+    "Faults",
+    "Injury load",
+    "Sequence",
+  ];
+
   return (
-    <div className="-mx-6 -my-5 flex min-h-[calc(100vh-2.5rem)] flex-col">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-border bg-background/95 px-5 py-2.5 backdrop-blur">
-        <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Breadcrumb">
-          <Link href="/sessions" className="hover:text-foreground">
-            Sessions
-          </Link>
-          <span>/</span>
+    <div className="mx-auto max-w-[1440px] space-y-10 pb-10">
+      <header className="flex flex-wrap items-end justify-between gap-4 pt-2">
+        <div className="min-w-0">
           <Link
             href={`/sessions/${out.session_id}`}
-            className="max-w-48 truncate hover:text-foreground"
+            className="block max-w-md truncate text-sm text-muted hover:text-foreground"
           >
-            {session.data?.session.original_name ?? "Session"}
+            ← {cleanName(session.data?.session.original_name)}
           </Link>
-          <span>/</span>
-          <h1 className="font-display text-sm font-semibold uppercase tracking-wider text-foreground">
+          <h1 className="mt-1 text-2xl font-semibold">
             Delivery {d.delivery_idx + 1} of {out.delivery_count}
           </h1>
-        </nav>
-        <div className="flex gap-1">
-          <NavBtn href={pos > 0 ? `/deliveries/${ids[pos - 1]}` : null}>‹ Prev</NavBtn>
-          <NavBtn href={pos >= 0 && pos < ids.length - 1 ? `/deliveries/${ids[pos + 1]}` : null}>
-            Next ›
-          </NavBtn>
+          <p className="mt-1 text-sm text-muted">
+            Release at frame {d.phases.release} (
+            {d.release_source === "user" ? "set by you" : "auto-detected"}) ·{" "}
+            {out.analysis_fps.toFixed(0)} fps real time · {arm}-arm
+          </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <VerdictWord verdict={d.legality.verdict} size="sm" />
-          <Chip label="Technique" value={`${d.technique_score.toFixed(0)}/100`} />
-          <Chip label="Risk" value={`${d.injury.overall.toFixed(0)} ${d.injury.band}`} />
-          <Chip label="Arm speed" value={`${fmt(bm.get("arm_angular_velocity"), 0)}°/s`} />
-          <Chip
-            label="Release"
-            value={`${d.release_source === "user" ? "manual" : "auto"} · f${d.phases.release}`}
-          />
+        <div className="flex items-center gap-4 text-sm">
+          <VerdictWord verdict={d.legality.verdict} verified={d.legality.screened} />
+          <span className="flex gap-3">
+            <NavBtn href={pos > 0 ? `/deliveries/${ids[pos - 1]}` : null}>← Prev</NavBtn>
+            <NavBtn href={pos >= 0 && pos < ids.length - 1 ? `/deliveries/${ids[pos + 1]}` : null}>
+              Next →
+            </NavBtn>
+          </span>
           <a
             href={api.reportUrl(out.session_id)}
             download
-            className="rounded-sm border border-border px-2.5 py-1 text-xs hover:border-accent"
+            className="rounded-md border border-border px-3 py-1.5 hover:border-accent"
           >
             PDF
           </a>
         </div>
-      </div>
+      </header>
       {(error || pose.error) && (
-        <div className="px-5 pt-3">
-          <ErrorBox error={error ?? `Couldn't load the skeleton: ${pose.error}`} />
-        </div>
+        <ErrorBox error={error ?? `Couldn't load the skeleton: ${pose.error}`} />
       )}
 
-      <div className="grid flex-1 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <section className="min-w-0 space-y-3 p-4" aria-label="Viewer">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="min-w-0 space-y-4" aria-label="Viewer">
           <StudioPlayer
             videoSrc={src}
             overlaySrc={fileUrl(out.overlay)}
@@ -207,268 +206,195 @@ function Workspace({
           />
         </section>
 
-        <aside className="border-l border-border bg-surface/60" aria-label="Inspector">
-          <div
-            className="sticky top-[49px] z-10 flex border-b border-border bg-surface"
-            role="tablist"
-          >
-            {TABS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
-                className={cn(
-                  "flex-1 border-b-2 px-1 py-2.5 font-display text-[11px] uppercase tracking-wider",
-                  tab === t
-                    ? "border-accent text-foreground"
-                    : "border-transparent text-muted hover:text-foreground",
-                )}
-              >
-                {t}
-              </button>
-            ))}
+        <aside className="space-y-5" aria-label="At release">
+          <SectionHead title="At release" hint="Slow-motion loop around the release point" />
+          <ReleaseLoop
+            videoSrc={src}
+            fps={out.fps}
+            realFps={out.analysis_fps}
+            releaseFrame={d.clip_start + d.phases.release}
+            frames={frames}
+            arm={arm}
+            edges={edges}
+            width={out.width}
+            height={out.height}
+          />
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+            <AngleDial label="Elbow at release" value={rel.elbow} band={[160, 180]} highlight />
+            <AngleDial label="Front knee" value={rel.frontKnee} band={[160, 180]} />
+            <AngleDial label="Trunk lean" value={rel.trunkLean} band={[0, 35]} />
+            <AngleDial
+              label="Arm elevation"
+              value={rel.upperArm === null ? null : rel.upperArm + 90}
+              band={[150, 180]}
+            />
           </div>
-          <div className="space-y-4 p-4">
-            {tab === "Release" && (
-              <>
-                <ReleaseLoop
-                  videoSrc={src}
-                  fps={out.fps}
-                  realFps={out.analysis_fps}
-                  releaseFrame={d.clip_start + d.phases.release}
-                  frames={frames}
-                  arm={arm}
-                  edges={edges}
-                  width={out.width}
-                  height={out.height}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <AngleDial
-                    label="Elbow at release"
-                    value={rel.elbow}
-                    band={[160, 180]}
-                    note="near straight"
-                    highlight
-                  />
-                  <AngleDial
-                    label="Front knee"
-                    value={rel.frontKnee}
-                    band={[160, 180]}
-                    note="braced ≥ 160°"
-                  />
-                  <AngleDial
-                    label="Trunk lean"
-                    value={rel.trunkLean}
-                    band={[0, 35]}
-                    note="from vertical"
-                  />
-                  <AngleDial
-                    label="Arm elevation"
-                    value={rel.upperArm === null ? null : rel.upperArm + 90}
-                    band={[150, 180]}
-                    note="0 = down, 180 = up"
-                  />
-                </div>
-                <dl className="grid grid-cols-2 gap-2 text-sm">
-                  <Kv
-                    k="Elbow straightening"
-                    v={
-                      d.legality.screened
-                        ? fmt(d.legality.elbow_extension_deg, 1, "°")
-                        : "not screened"
-                    }
-                  />
-                  <Kv k="Release height" v={fmt(d.release_height_pct, 0, "% height")} />
-                  <Kv k="Arm horiz. → release" v={fmt(bm.get("ah_to_release"), 3, " s")} />
-                  <Kv k="Wrist speed" v={fmt(bm.get("wrist_speed"), 1, " h/s")} />
-                </dl>
-                <p className="text-[11px] text-muted">
-                  Release frame found by{" "}
-                  {d.release_source === "user"
-                    ? "you"
-                    : d.release_source === "model"
-                      ? "the learned model"
-                      : "the frame-precise rules"}
-                  . Wrong? Step to it in the viewer and press{" "}
-                  <span className="text-release">Set release here</span>.
-                </p>
-              </>
-            )}
-            {tab === "Live" && (
-              <>
-                <LiveAngles
-                  pose={frames?.get(d.clip_start + frame)}
-                  arm={arm}
-                  phase={phaseAt(frame, d.phases)}
-                />
-                <p className="text-[11px] text-muted">Updates as you play or scrub the viewer.</p>
-              </>
-            )}
-            {tab === "Mechanics" && (
-              <>
-                <KineticChain metrics={d.biomechanics} />
-                <MechanicsPanel metrics={d.biomechanics} compact />
-              </>
-            )}
-            {tab === "Legality" && (
-              <>
-                <div className={cn("rounded-sm border p-3", verdict.cls)}>
-                  <VerdictWord verdict={d.legality.verdict} />
-                  <p className="mt-2 text-sm text-foreground">{d.legality.verdict_text}</p>
-                </div>
-                {curve("bowling_elbow") && (
-                  <AngleChart
-                    series={curve("bowling_elbow")!}
-                    title="Bowling elbow through the delivery"
-                    current={frame}
-                    markers={[
-                      { frame: d.phases.arm_horizontal, label: "AH" },
-                      { frame: d.phases.release, label: "REL" },
-                    ]}
-                    onSeek={jump}
-                  />
-                )}
-                <dl className="grid grid-cols-2 gap-2 text-sm">
-                  <Kv k="Measured straightening" v={fmt(d.legality.elbow_extension_deg, 1, "°")} />
-                  <Kv k="Limit" v={`${d.legality.threshold_deg.toFixed(0)}°`} />
-                  <Kv k="Confidence" v={d.legality.confidence} />
-                  <Kv k="Frame rate" v={`${out.analysis_fps.toFixed(0)} fps`} />
-                </dl>
-                <p className="text-[11px] text-muted">{d.legality.note}</p>
-              </>
-            )}
-            {tab === "Faults" && (
-              <FaultList
-                faults={d.faults}
-                drills={drills.data}
-                notMeasured={d.not_measured}
-                onJump={jump}
-              />
-            )}
-            {tab === "Load" && (
-              <>
-                <div className="flex justify-center">
-                  <RiskGauge score={d.injury.overall} />
-                </div>
-                <BodyRiskMap injury={d.injury} bowlingArm={arm} />
-              </>
-            )}
-          </div>
+          <dl className="divide-y divide-border border-y border-border text-sm">
+            <Kv k="Elbow straightening" v={fmt(d.legality.elbow_extension_deg, 1, "°")} />
+            <Kv k="Release height" v={fmt(d.release_height_pct, 0, "% of height")} />
+            <Kv k="Arm speed" v={fmt(bm.get("arm_angular_velocity"), 0, "°/s")} />
+            <Kv k="Technique" v={`${d.technique_score.toFixed(0)} / 100`} />
+          </dl>
+          <p className="text-xs leading-relaxed text-muted">
+            Wrong release frame? Step to it in the viewer and press{" "}
+            <span className="text-release">Set release here</span>.
+          </p>
         </aside>
       </div>
 
-      <div className="space-y-4 border-t border-border p-4">
-        <Section title="Action sequence" hint="Skeleton at each phase; click to open in the viewer">
-          <PhaseFilmstrip d={d} frames={frames} arm={arm} edges={edges} onSeek={jump} />
-        </Section>
-        <Section
-          title="Joint curves"
-          hint="Angle and angular velocity, synced to the viewer"
-          aside={
-            <div className="flex gap-1">
-              {JOINTS.map(([k, l]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setJoint(k)}
-                  className={cn(
-                    "rounded-sm border px-2 py-0.5 text-[11px]",
-                    joint === k
-                      ? "border-accent text-accent"
-                      : "border-border text-muted hover:text-foreground",
-                  )}
-                >
-                  {l}
-                </button>
-              ))}
+      <section>
+        <div className="mb-6 flex gap-6 overflow-x-auto border-b border-border" role="tablist">
+          {tabs.map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "-mb-px whitespace-nowrap border-b-2 pb-2.5 text-sm",
+                tab === t
+                  ? "border-accent text-foreground"
+                  : "border-transparent text-muted hover:text-foreground",
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "Legality" && (
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <div className="space-y-4">
+              <VerdictWord verdict={d.legality.verdict} verified={d.legality.screened} />
+              <p className="text-[15px] leading-relaxed">
+                {d.legality.verdict_text.split(" Unverified:")[0]}
+              </p>
+              {!d.legality.screened && d.legality.not_screened_reason && (
+                <p className="border-l-2 border-warn/60 pl-3 text-sm text-muted">
+                  <span className="text-warn">Why it&apos;s not certain: </span>
+                  {d.legality.not_screened_reason.replace(/^Unverified:\s*/, "")} The verdict is
+                  read straight from the angle, so treat it as a guide and re-film side-on at 120+
+                  fps to confirm.
+                </p>
+              )}
+              <dl className="divide-y divide-border border-y border-border text-sm">
+                <Kv k="Measured straightening" v={fmt(d.legality.elbow_extension_deg, 1, "°")} />
+                <Kv k="Limit" v={`${d.legality.threshold_deg.toFixed(0)}°`} />
+                <Kv k="Confidence" v={d.legality.confidence} />
+              </dl>
+              <p className="text-xs text-muted">{d.legality.note.split(" Unverified:")[0]}</p>
             </div>
-          }
-        >
-          <div className="grid gap-4 lg:grid-cols-2">
-            {curve(joint) && (
+            {curve("bowling_elbow") && (
               <AngleChart
-                series={curve(joint)!}
-                title="Angle (°)"
+                series={curve("bowling_elbow")!}
+                title="Bowling elbow through the delivery"
                 current={frame}
-                markers={releaseMarkers}
-                onSeek={jump}
-              />
-            )}
-            {curve(`${joint}_velocity`) && (
-              <AngleChart
-                series={curve(`${joint}_velocity`)!}
-                title="Angular velocity (°/s)"
-                current={frame}
-                markers={releaseMarkers}
+                markers={[
+                  { frame: d.phases.arm_horizontal, label: "AH" },
+                  { frame: d.phases.release, label: "REL" },
+                ]}
                 onSeek={jump}
               />
             )}
           </div>
-        </Section>
-        <Section title="Full mechanics" hint="Every measurement, grouped by moment of the delivery">
-          <MechanicsPanel metrics={d.biomechanics} />
-        </Section>
-      </div>
+        )}
+        {tab === "Joint angles" && (
+          <div className="grid gap-10 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div>
+              <p className="mb-3 text-sm text-muted">At the current frame</p>
+              <LiveAngles
+                pose={frames?.get(d.clip_start + frame)}
+                arm={arm}
+                phase={phaseAt(frame, d.phases)}
+              />
+            </div>
+            <div>
+              <div className="mb-4 flex flex-wrap gap-2">
+                {JOINTS.map(([k, l]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setJoint(k)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs",
+                      joint === k
+                        ? "border-accent text-accent"
+                        : "border-border text-muted hover:text-foreground",
+                    )}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-6 lg:grid-cols-2">
+                {curve(joint) && (
+                  <AngleChart
+                    series={curve(joint)!}
+                    title="Angle (°)"
+                    current={frame}
+                    markers={releaseMarkers}
+                    onSeek={jump}
+                  />
+                )}
+                {curve(`${joint}_velocity`) && (
+                  <AngleChart
+                    series={curve(`${joint}_velocity`)!}
+                    title="Angular velocity (°/s)"
+                    current={frame}
+                    markers={releaseMarkers}
+                    onSeek={jump}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {tab === "Mechanics" && (
+          <div className="space-y-8">
+            <KineticChain metrics={d.biomechanics} />
+            <MechanicsPanel metrics={d.biomechanics} />
+          </div>
+        )}
+        {tab === "Faults" && (
+          <div className="max-w-3xl">
+            <FaultList
+              faults={d.faults}
+              drills={drills.data}
+              notMeasured={d.not_measured}
+              onJump={jump}
+            />
+          </div>
+        )}
+        {tab === "Injury load" && (
+          <div className="grid items-start gap-10 md:grid-cols-[260px_minmax(0,1fr)]">
+            <RiskGauge score={d.injury.overall} />
+            <BodyRiskMap injury={d.injury} bowlingArm={arm} />
+          </div>
+        )}
+        {tab === "Sequence" && (
+          <PhaseFilmstrip d={d} frames={frames} arm={arm} edges={edges} onSeek={jump} />
+        )}
+      </section>
     </div>
-  );
-}
-
-function Section({
-  title,
-  hint,
-  aside,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  aside?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-md border border-border bg-surface/70">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-        <div>
-          <h2 className="font-display text-sm font-semibold uppercase tracking-[0.14em]">
-            {title}
-          </h2>
-          {hint && <p className="text-[11px] text-muted">{hint}</p>}
-        </div>
-        {aside}
-      </header>
-      <div className="p-4">{children}</div>
-    </section>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="flex items-baseline gap-1.5 rounded-sm border border-border bg-surface px-2 py-1 text-xs">
-      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
-      <span className="tabular font-semibold">{value}</span>
-    </span>
   );
 }
 
 function Kv({ k, v }: { k: string; v: string }) {
   return (
-    <div className="rounded-sm border border-border bg-surface-2 px-2.5 py-1.5">
-      <dt className="text-[10px] uppercase tracking-wider text-muted">{k}</dt>
-      <dd className="tabular font-semibold">{v}</dd>
+    <div className="flex justify-between gap-4 py-2">
+      <dt className="text-muted">{k}</dt>
+      <dd className="tabular">{v}</dd>
     </div>
   );
 }
 
 function NavBtn({ href, children }: { href: string | null; children: React.ReactNode }) {
   return href ? (
-    <Link
-      href={href}
-      className="rounded-sm border border-border px-2 py-1 text-xs hover:border-accent"
-    >
+    <Link href={href} className="text-muted hover:text-foreground">
       {children}
     </Link>
   ) : (
-    <span className="rounded-sm border border-border px-2 py-1 text-xs opacity-35">{children}</span>
+    <span className="text-muted opacity-35">{children}</span>
   );
 }

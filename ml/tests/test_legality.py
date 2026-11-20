@@ -226,8 +226,8 @@ def test_assess_legality_includes_no_ball() -> None:
 # --- screening gate: never flag what can't be measured ------------------------------------------
 
 
-def test_untrustworthy_clips_are_not_screened() -> None:
-    """A clean 22 deg throw is flagged; the same clip is not flagged when the measurement
+def test_untrustworthy_clips_are_unverified() -> None:
+    """A clean 22 deg throw is flagged; the same clip is marked unverified when the measurement
     can't be trusted (low fps, front view, broken phases, long window, implausible value)."""
     s = load_settings()
     r = generate(SynthParams(elbow_extension_deg=22.0, fps=120.0))
@@ -237,9 +237,10 @@ def test_untrustworthy_clips_are_not_screened() -> None:
 
     def check(seq_: object, phases: object, settings: object, needle: str) -> None:
         res = assess_legality(seq_, phases, settings)  # type: ignore[arg-type]
-        assert not res.flagged and not res.screened and res.confidence == "low"
+        assert not res.screened and res.confidence == "low"
         assert res.not_screened_reason is not None and needle in res.not_screened_reason
-        assert res.note.startswith(ICC_NOTE) and "Not screened" in res.note
+        assert res.note.startswith(ICC_NOTE) and "Unverified" in res.note
+        assert res.verdict in ("legal", "not_legal") and "Unverified:" in res.verdict_text
 
     leg = s.legality
     check(seq, r.phases, leg.model_copy(update={"screen_min_fps": 200.0}), "fps")
@@ -254,7 +255,7 @@ def test_untrustworthy_clips_are_not_screened() -> None:
     check(seq, r.phases, leg.model_copy(update={"screen_max_plausible_deg": 10.0}), "beyond")
 
 
-def test_verdict_legal_not_legal_cannot_judge() -> None:
+def test_verdict_always_follows_the_angle() -> None:
     s = load_settings()
     for ext, verdict in ((8.0, "legal"), (22.0, "not_legal")):
         r = generate(SynthParams(elbow_extension_deg=ext, fps=120.0))
@@ -265,5 +266,7 @@ def test_verdict_legal_not_legal_cannot_judge() -> None:
     r = generate(SynthParams(elbow_extension_deg=22.0, fps=120.0))
     seq = clean_sequence(r.sequence, s.pose).model_copy(update={"view": "front"})
     res = assess_legality(seq, r.phases, s.legality)
-    assert res.verdict == "cannot_judge" and res.verdict_text.startswith("Can't judge")
-    assert not res.flagged
+    # an untrustworthy clip still gets a verdict from the angle, marked unverified
+    assert res.verdict == "not_legal" and res.flagged and not res.screened
+    assert res.verdict_text.startswith("Not legal:") and "Unverified:" in res.verdict_text
+    assert "side-on" in res.verdict_text

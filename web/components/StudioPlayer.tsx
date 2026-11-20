@@ -347,13 +347,21 @@ export function StudioPlayer({
         <Ctl onClick={() => goTo(frame + 10)} label="Forward 10 frames">
           10 ⏭
         </Ctl>
-        <span className="mx-1 h-6 w-px bg-border" />
-        {SPEEDS.map((sp) => (
-          <Ctl key={sp} onClick={() => setSpeed(sp)} active={speed === sp} label={`Speed ${sp}x`}>
-            {sp}×
-          </Ctl>
-        ))}
-        <span className="mx-1 h-6 w-px bg-border" />
+        <label className="ml-2 flex items-center gap-1.5 text-xs text-muted">
+          Speed
+          <select
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            aria-label="Playback speed"
+            className="rounded-md border border-border bg-surface px-1.5 py-1 text-foreground"
+          >
+            {SPEEDS.map((sp) => (
+              <option key={sp} value={sp}>
+                {sp}×
+              </option>
+            ))}
+          </select>
+        </label>
         <Ctl onClick={() => goTo(phases.release)} label="Jump to release">
           ⦿ Release
         </Ctl>
@@ -361,33 +369,36 @@ export function StudioPlayer({
           type="button"
           disabled={busy || atRelease}
           onClick={() => onSetRelease(frame)}
-          className="rounded-sm border border-release px-2.5 py-1.5 font-display text-xs font-semibold uppercase tracking-wider text-release hover:bg-release hover:text-black disabled:opacity-40"
+          className="rounded-md border border-release/60 px-2.5 py-1 text-xs text-release hover:bg-release hover:text-black disabled:opacity-40"
         >
           {busy ? "Re-analysing…" : "Set release here"}
         </button>
-        <div className="ml-auto flex items-center gap-3 text-xs text-muted">
-          <Toggle on={skeleton && !burned} set={setSkeleton} disabled={burned}>
-            Skeleton
-          </Toggle>
-          <Toggle on={trail} set={setTrail} disabled={burned}>
-            Wrist path
-          </Toggle>
-          <Toggle on={onion} set={setOnion} disabled={burned}>
-            Onion skin
-          </Toggle>
-          <Toggle on={burned} set={setBurned}>
-            Rendered overlay
-          </Toggle>
-          <Toggle on={loop} set={setLoop}>
-            Loop
-          </Toggle>
-        </div>
+        <details className="relative ml-auto text-xs">
+          <summary className="cursor-pointer list-none rounded-md border border-border px-2.5 py-1 text-muted hover:text-foreground">
+            Layers ▾
+          </summary>
+          <div className="absolute right-0 z-20 mt-1 grid w-44 gap-2 rounded-md border border-border bg-surface p-3 text-muted shadow-xl">
+            <Toggle on={skeleton && !burned} set={setSkeleton} disabled={burned}>
+              Skeleton
+            </Toggle>
+            <Toggle on={trail} set={setTrail} disabled={burned}>
+              Wrist path
+            </Toggle>
+            <Toggle on={onion} set={setOnion} disabled={burned}>
+              Onion skin
+            </Toggle>
+            <Toggle on={burned} set={setBurned}>
+              Rendered overlay
+            </Toggle>
+            <Toggle on={loop} set={setLoop}>
+              Loop
+            </Toggle>
+            <p className="border-t border-border pt-2 leading-relaxed">
+              Keys: Space play · ←/→ frame · Shift+arrows 10 · [ ] speed · R release
+            </p>
+          </div>
+        </details>
       </div>
-      <p className="text-xs text-muted">
-        Keys: <kbd>Space</kbd> play · <kbd>←</kbd>/<kbd>→</kbd> frame · <kbd>Shift</kbd>+arrows 10
-        frames · <kbd>[</kbd>/<kbd>]</kbd> speed · <kbd>R</kbd> release. Times are real time (
-        {realFps.toFixed(0)} fps).
-      </p>
     </div>
   );
 }
@@ -489,12 +500,12 @@ function Ctl({
       aria-label={label}
       title={label}
       className={cn(
-        "tabular rounded-sm border px-2.5 py-1.5 text-xs transition-colors",
+        "tabular rounded-md px-2.5 py-1 text-xs transition-colors",
         strong
-          ? "border-accent bg-accent font-semibold text-black hover:bg-accent-strong"
+          ? "bg-accent font-semibold text-black hover:bg-accent-strong"
           : active
-            ? "border-accent text-accent"
-            : "border-border text-foreground hover:border-accent",
+            ? "text-accent"
+            : "text-muted hover:bg-surface-2 hover:text-foreground",
       )}
     >
       {children}

@@ -125,15 +125,15 @@ def summarise_session(
         legality_flagged=sum(d.legality.flagged for d in deliveries),
         legality_screened=len(screened),
         legality_max_extension_deg=max(
-            (d.legality.elbow_extension_deg for d in screened), default=0.0
+            (d.legality.elbow_extension_deg for d in deliveries), default=0.0
         ),
         legality_threshold_deg=deliveries[0].legality.threshold_deg,
         legality_note=(
             screened[0].legality.note
             if screened
-            else "Elbow legality was not screened: this clip can't support a trustworthy "
-            "elbow measurement (needs a side-on camera at 60+ fps with the delivery phases "
-            "found)."
+            else "Unverified: this clip can't support a trustworthy elbow measurement "
+            "(needs a side-on camera at 60+ fps with the delivery phases found), so the "
+            "verdict is a rough guide from the measured angle."
         ),
         injury_overall_mean=float(np.mean([d.injury.overall for d in deliveries])),
         injury_band_worst=max((d.injury.band for d in deliveries), key=_BAND_ORDER.__getitem__),
@@ -159,7 +159,7 @@ def system_prompt(max_words: int, top: int) -> str:
         "each. Do not make any medical diagnosis or claim an injury; describe injury-risk "
         "figures only as screening estimates and suggest seeing a professional about pain. "
         "Describe elbow legality as 2D screening only (the official test uses 3D motion "
-        "capture). If legality_screened is 0, say only that the elbow wasn't screened for this "
+        "capture). If legality_screened is 0, say the verdict is unverified for this "
         "clip and why; never quote an elbow angle or call the action illegal. "
         f"Use plain language a player understands. At most {max_words} words."
     )

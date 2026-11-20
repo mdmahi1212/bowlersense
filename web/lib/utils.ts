@@ -58,3 +58,13 @@ export const PHASE_EVENTS = [
 ] as const;
 
 export type PhaseKey = (typeof PHASE_EVENTS)[number][0];
+
+/** "jofra archer action slo-mo #cricket #shorts.mp4" -> "jofra archer action slo-mo" */
+export function cleanName(name: string | null | undefined): string {
+  const n = (name ?? "")
+    .replace(/\.[a-z0-9]{2,4}$/i, "")
+    .replace(/#\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return n || "Untitled session";
+}

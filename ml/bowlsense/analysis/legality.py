@@ -180,22 +180,28 @@ def screening_problems(
 
 
 def legality_verdict(
-    extension: float, limit: float, flagged: bool, screened: bool
+    extension: float, limit: float, flagged: bool, problems: Sequence[str] = ()
 ) -> tuple[Literal["legal", "not_legal", "cannot_judge"], str]:
-    """The plain-language verdict for one delivery (2D screening, not the ICC test)."""
-    if not screened:
-        return "cannot_judge", (
-            "Can't judge: this video can't measure the elbow reliably. Film side-on at 60+ fps "
-            "(120+ is best)."
-        )
+    """The plain-language verdict for one delivery (2D screening, not the ICC test).
+
+    The verdict always follows the measured angle (<= limit legal, > limit not legal). When
+    the clip can't support a trustworthy measurement, the text says the verdict is unverified
+    and why."""
     if flagged:
-        return "not_legal", (
+        text = (
             f"Not legal: the elbow straightened {extension:.1f} deg, more than the {limit:.0f} deg "
             "limit."
         )
-    return "legal", (
-        f"Legal: the elbow straightened {extension:.1f} deg, within the {limit:.0f} deg limit."
-    )
+    else:
+        text = (
+            f"Legal: the elbow straightened {extension:.1f} deg, within the {limit:.0f} deg limit."
+        )
+    if problems:
+        text += (
+            " Unverified: " + "; ".join(problems) + ". Treat this as a rough guide and re-film "
+            "side-on at 120+ fps to confirm."
+        )
+    return ("not_legal" if flagged else "legal"), text
 
 
 def assess_legality(
@@ -214,7 +220,8 @@ def assess_legality(
 
     Elbow angles only move in the image plane from a side-on camera, so other views cap
     confidence at "low". Clips that can't support a trustworthy measurement are reported as
-    not screened (never flagged); see ``screening_problems``.
+    not screened: the verdict still follows the angle, but ``screened`` is False and the
+    text says why it is unverified; see ``screening_problems``.
     """
     angles = elbow_angles(raw if raw is not None else seq)
     estimated_ah = not _arm_horizontal_plausible(seq, phases, settings)
@@ -237,12 +244,12 @@ def assess_legality(
     problems = screening_problems(seq, phases, extension, settings)
     reason = None
     if problems:
-        reason = "Not screened: " + "; ".join(problems) + "."
+        reason = "Unverified: " + "; ".join(problems) + "."
         note += " " + reason
         confidence = "low"
     limit = settings.elbow_extension_threshold_deg
-    flagged = not problems and extension > limit
-    verdict, verdict_text = legality_verdict(extension, limit, flagged, not problems)
+    flagged = extension > limit
+    verdict, verdict_text = legality_verdict(extension, limit, flagged, problems)
     return LegalityResult(
         elbow_extension_deg=extension,
         threshold_deg=limit,

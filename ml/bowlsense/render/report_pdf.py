@@ -192,9 +192,7 @@ def build_report(data: ReportInput, path: Path, chart_dir: Path, threshold_deg: 
                 (
                     f"{'NOT LEGAL' if leg.flagged else 'LEGAL'}: "
                     f"{leg.elbow_extension_deg:.1f} deg (limit {leg.threshold_deg:.0f}; "
-                    f"{leg.confidence} confidence)"
-                    if leg.screened
-                    else "CAN'T JUDGE (see note)"
+                    + (f"{leg.confidence} confidence)" if leg.screened else "unverified)")
                 ),
                 a.alignment.action_type.replace("_", " "),
                 _ball_text(a),
