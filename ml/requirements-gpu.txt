@@ -1,0 +1,9 @@
+# NVIDIA GPU (CUDA 13) builds, installed on top of requirements.txt by `scripts/setup.py`
+# when an NVIDIA GPU is found (or with --gpu). Needs an NVIDIA driver that supports CUDA 13.
+# The CUDA build of torch also ships the CUDA/cuDNN DLLs that onnxruntime-gpu uses.
+# (PyTorch has no CUDA build of 2.15.0 yet, so the GPU install uses 2.14.1.)
+# Remove the CPU onnxruntime first: `pip uninstall onnxruntime` (setup.py does this).
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.14.1+cu130
+torchvision==0.29.1+cu130
+onnxruntime-gpu==1.32.0

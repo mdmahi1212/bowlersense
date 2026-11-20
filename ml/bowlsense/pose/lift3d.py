@@ -83,10 +83,10 @@ class MotionBertLifter:
         """Load the ONNX model once."""
         import onnxruntime as ort
 
-        from bowlsense.device import gpu_allowed
+        from bowlsense.device import onnx_cuda_ready
 
         providers = ["CPUExecutionProvider"]
-        if gpu_allowed() and "CUDAExecutionProvider" in ort.get_available_providers():
+        if onnx_cuda_ready():
             providers.insert(0, "CUDAExecutionProvider")
         self.session: Any = ort.InferenceSession(str(model), providers=providers)
         self.input = self.session.get_inputs()[0].name

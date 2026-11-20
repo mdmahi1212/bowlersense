@@ -63,7 +63,7 @@ ml/.venv/bin/python scripts/download_models.py
 python3 run.py
 ```
 
-For an NVIDIA GPU, install the CUDA build of the same `torch` version and `onnxruntime-gpu` into `ml/.venv` after setup. BowlSense detects CUDA automatically and falls back to the CPU with a log line. The GPU can also be switched off on the Settings page.
+With an NVIDIA GPU, `setup.py` detects it (`nvidia-smi`) and installs the CUDA 13 builds from `ml/requirements-gpu.txt`: PyTorch 2.14.1+cu130 and onnxruntime-gpu, about 2.5 GB. Pass `--cpu` to skip them or `--gpu` to force them. YOLO and RTMPose then run on the GPU, which `/health` and the Settings page show. Without a GPU, BowlSense falls back to the CPU with a log line. The GPU can be switched off on the Settings page.
 
 ### The AI coach (optional, local)
 

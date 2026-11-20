@@ -1,7 +1,9 @@
 """One-time setup: Python virtualenv + pinned packages, web app packages, database.
 
 Run with any Python 3.11:  ``python scripts/setup.py``   (``--dev`` adds test/lint tools,
-``--no-web`` skips the Node.js part). Needs the internet once; afterwards run
+``--no-web`` skips the Node.js part). With an NVIDIA GPU (``nvidia-smi`` works) the CUDA
+builds in ``ml/requirements-gpu.txt`` are installed too; ``--cpu`` / ``--gpu`` override that.
+Needs the internet once; afterwards run
 ``python scripts/download_models.py`` and then ``python run.py``.
 
 Uses ``uv`` when it is installed (much faster), otherwise ``python -m venv`` + pip.
@@ -32,6 +34,28 @@ def run(cmd: list[str], cwd: Path = ROOT) -> None:
 def venv_python() -> Path:
     """The virtualenv's interpreter path for this OS."""
     return VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def has_nvidia_gpu() -> bool:
+    """True if ``nvidia-smi`` lists a GPU."""
+    exe = shutil.which("nvidia-smi")
+    if exe is None:
+        return False
+    out = subprocess.run([exe, "-L"], capture_output=True, text=True, check=False)
+    return out.returncode == 0 and "GPU" in out.stdout
+
+
+def setup_gpu(py: Path) -> None:
+    """Swap in the CUDA builds of torch and onnxruntime (requirements-gpu.txt)."""
+    reqs = ML / "requirements-gpu.txt"
+    uv = shutil.which("uv")
+    if uv:
+        run([uv, "pip", "uninstall", "--python", str(py), "onnxruntime"])
+        run([uv, "pip", "install", "--python", str(py), "-r", str(reqs)])
+    else:
+        run([str(py), "-m", "pip", "uninstall", "-y", "onnxruntime"])
+        run([str(py), "-m", "pip", "install", "-r", str(reqs)])
+    run([str(py), "-c", "from bowlsense.device import gpu_status; print('GPU:', gpu_status())"], ML)
 
 
 def setup_python(dev: bool) -> Path:
@@ -72,8 +96,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Set up BowlSense")
     parser.add_argument("--dev", action="store_true", help="also install test/lint tools")
     parser.add_argument("--no-web", action="store_true", help="skip the Node.js web app")
+    gpu = parser.add_mutually_exclusive_group()
+    gpu.add_argument("--gpu", action="store_true", help="install the NVIDIA CUDA builds")
+    gpu.add_argument("--cpu", action="store_true", help="stay on the CPU builds")
     args = parser.parse_args(argv)
     py = setup_python(args.dev)
+    if args.gpu or (not args.cpu and has_nvidia_gpu()):
+        print("NVIDIA GPU found: installing the CUDA builds (about 2.5 GB, one time).", flush=True)
+        setup_gpu(py)
     run(
         [
             str(py),
