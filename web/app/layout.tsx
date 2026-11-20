@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
-import { Nav } from "@/components/Nav";
+import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "BowlSense",
-  description: "Local AI analysis of cricket bowling actions",
+  description: "Local AI biomechanics lab for cricket bowling",
 };
 
 const LOCAL_API = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
@@ -24,18 +24,19 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <head>
         <meta name="bowlsense-api" content={apiUrl()} />
       </head>
-      <body className="flex min-h-full flex-col">
+      <body className="min-h-full">
         <a href="#main" className="sr-only focus:not-sr-only focus:p-2">
           Skip to content
         </a>
-        <Nav />
-        <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-          {children}
-        </main>
-        <footer className="border-t border-border px-4 py-3 text-center text-xs text-muted">
-          Runs entirely on this computer. Legality is 2D video screening only; injury risk is a
-          rule-based estimate, not medical advice.
-        </footer>
+        <AppShell>
+          <main id="main" className="w-full flex-1 px-6 py-5">
+            {children}
+          </main>
+          <footer className="border-t border-border px-6 py-2 text-[11px] text-muted">
+            Legality is 2D video screening, not the ICC 3D test. Injury risk is a rule-based
+            estimate, not medical advice.
+          </footer>
+        </AppShell>
       </body>
     </html>
   );

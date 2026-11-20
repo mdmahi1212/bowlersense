@@ -32,6 +32,7 @@ export function StudioPlayer({
   busy,
   width,
   height,
+  hideTimeline = false,
 }: {
   videoSrc: string;
   overlaySrc: string;
@@ -50,6 +51,8 @@ export function StudioPlayer({
   /** Video size in pixels (pose coordinates), used until the video's own size is known. */
   width: number;
   height: number;
+  /** The page shows its own multi-track timeline instead. */
+  hideTimeline?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -59,6 +62,8 @@ export function StudioPlayer({
   const [skeleton, setSkeleton] = useState(true);
   const [burned, setBurned] = useState(false);
   const [loop, setLoop] = useState(true);
+  const [trail, setTrail] = useState(true);
+  const [onion, setOnion] = useState(false);
   const length = Math.max(1, clipStop - clipStart);
   const last = length - 1;
 
@@ -78,6 +83,43 @@ export function StudioPlayer({
       ctx.clearRect(0, 0, w, h);
       const pose = frames?.get(clipStart + clipFrame);
       if (!skeleton || burned || !pose) return;
+      const sc = Math.max(1.5, w / 500);
+      const chain = ["shoulder", "elbow", "wrist"].map((p) => jointName(arm, "bowling", p));
+      if (trail && frames) {
+        // wrist path over the last 0.4 s (real time), fading
+        const span = Math.max(4, Math.round(0.4 * realFps));
+        let prev: { x: number; y: number } | null = null;
+        for (let i = Math.max(0, clipFrame - span); i <= clipFrame; i++) {
+          const wp = frames.get(clipStart + i)?.keypoints[chain[2]];
+          if (wp && prev) {
+            ctx.strokeStyle = `rgba(198,244,50,${(0.1 + 0.8 * (1 - (clipFrame - i) / span)).toFixed(2)})`;
+            ctx.lineWidth = 2.2 * sc;
+            ctx.beginPath();
+            ctx.moveTo(prev.x, prev.y);
+            ctx.lineTo(wp.x, wp.y);
+            ctx.stroke();
+          }
+          prev = wp ?? null;
+        }
+      }
+      if (onion && frames) {
+        const step = Math.max(1, Math.round(0.02 * realFps));
+        for (let g = 6; g >= 1; g--) {
+          const kk = frames.get(clipStart + clipFrame - g * step)?.keypoints;
+          if (!kk) continue;
+          ctx.strokeStyle = `rgba(233,239,231,${(0.08 + 0.06 * (6 - g)).toFixed(2)})`;
+          ctx.lineWidth = 2 * sc;
+          for (const [a, b] of edges) {
+            const p = kk[a];
+            const q = kk[b];
+            if (!p || !q) continue;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.stroke();
+          }
+        }
+      }
       const k = pose.keypoints;
       const s = Math.max(1.5, w / 500);
       const bowl = new Set(["shoulder", "elbow", "wrist"].map((p) => jointName(arm, "bowling", p)));
@@ -133,7 +175,7 @@ export function StudioPlayer({
         ORANGE,
       );
     },
-    [frames, clipStart, skeleton, burned, arm, edges, width, height],
+    [frames, clipStart, skeleton, burned, arm, edges, width, height, trail, onion, realFps],
   );
 
   const report = useCallback(
@@ -285,7 +327,9 @@ export function StudioPlayer({
         </div>
       </div>
 
-      <Timeline length={length} frame={frame} phases={phases} onSeek={goTo} pct={pct} />
+      {!hideTimeline && (
+        <Timeline length={length} frame={frame} phases={phases} onSeek={goTo} pct={pct} />
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         <Ctl onClick={() => goTo(frame - 10)} label="Back 10 frames">
@@ -324,6 +368,12 @@ export function StudioPlayer({
         <div className="ml-auto flex items-center gap-3 text-xs text-muted">
           <Toggle on={skeleton && !burned} set={setSkeleton} disabled={burned}>
             Skeleton
+          </Toggle>
+          <Toggle on={trail} set={setTrail} disabled={burned}>
+            Wrist path
+          </Toggle>
+          <Toggle on={onion} set={setOnion} disabled={burned}>
+            Onion skin
           </Toggle>
           <Toggle on={burned} set={setBurned}>
             Rendered overlay

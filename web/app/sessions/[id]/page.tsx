@@ -57,11 +57,20 @@ function SessionView({ out, reload }: { out: SessionOut; reload: () => void }) {
   const status = live?.status ?? out.session.status;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{out.session.original_name ?? "Session"}</h1>
-          <p className="text-sm text-muted">Session {id.slice(0, 8)}</p>
+          <p className="font-display text-[10px] uppercase tracking-[0.2em] text-muted">
+            <Link href="/sessions" className="hover:text-foreground">
+              Sessions
+            </Link>{" "}
+            / {id.slice(0, 8)}
+            {out.result &&
+              ` · ${out.result.view} view · ${out.result.bowling_arm}-arm · ${out.result.pose_backend}`}
+          </p>
+          <h1 className="font-display text-2xl font-semibold tracking-wide">
+            {out.session.original_name ?? "Session"}
+          </h1>
         </div>
         {status !== "deleted" && <StatusBadge status={status} />}
       </div>
@@ -160,155 +169,208 @@ function Results({
 }) {
   const [calibrating, setCalibrating] = useState(false);
   const ds = result.deliveries;
-  const technique = ds.reduce((a, d) => a + d.technique_score, 0) / Math.max(1, ds.length);
-  const injury = ds.reduce((a, d) => a + d.injury.overall, 0) / Math.max(1, ds.length);
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
+  const technique = avg(ds.map((d) => d.technique_score));
+  const injury = avg(ds.map((d) => d.injury.overall));
   const flagged = ds.filter((d) => d.legality.flagged).length;
   const screened = ds.filter((d) => d.legality.screened);
-  const maxExt = Math.max(
-    ...ds.filter((d) => d.legality.screened).map((d) => d.legality.elbow_extension_deg),
+  const maxExt = screened.length
+    ? Math.max(...screened.map((d) => d.legality.elbow_extension_deg))
+    : null;
+  const speeds = ds.map((d) => d.speed_kmh).filter((v): v is number => v !== null);
+  const band = bandStyle[bandOf(injury)];
+  const faultCounts = new Map<string, number>();
+  ds.forEach((d) =>
+    d.faults.forEach((f) => faultCounts.set(f.name, (faultCounts.get(f.name) ?? 0) + 1)),
   );
+  const topFaults = [...faultCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   return (
     <>
       {result.quality_warnings.length > 0 && (
-        <Card className="border-warn/50 bg-warn/10">
-          <p className="font-semibold text-warn">Recording quality</p>
-          <ul className="mt-1 list-disc pl-5 text-sm">
-            {result.quality_warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </Card>
+        <div className="rounded-sm border border-warn/40 bg-warn/10 px-4 py-2.5 text-sm">
+          <span className="mr-2 font-display text-xs font-semibold uppercase tracking-wider text-warn">
+            Recording quality
+          </span>
+          {result.quality_warnings.join(" · ")}
+        </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardTitle>Technique</CardTitle>
-          <p className="text-4xl font-bold" data-testid="technique-score">
-            {technique.toFixed(0)}
-            <span className="text-base text-muted">/100</span>
-          </p>
-          <p className="text-sm text-muted">
-            {ds.length} deliver{ds.length === 1 ? "y" : "ies"} · {result.view} view ·{" "}
-            {result.bowling_arm}-arm
-          </p>
-        </Card>
-        <Card className="flex justify-center">
-          <RiskGauge score={injury} />
-        </Card>
-        <Card>
-          <CardTitle>Legality</CardTitle>
-          <VerdictWord verdict={sessionVerdict(ds.map((d) => d.legality.verdict))} />
-          <p className="mt-2 text-sm">
-            {screened.length === 0
-              ? ds[0]?.legality.verdict_text
-              : `${screened.length - flagged} legal, ${flagged} not legal` +
-                (ds.length > screened.length
-                  ? `, ${ds.length - screened.length} can't judge`
-                  : "") +
-                ` · max elbow straightening ${fmt(maxExt, 1, "°")} (limit 15°)`}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            2D video screening, not the official ICC test (which uses 3D motion capture).
-          </p>
-        </Card>
-        <Card>
-          <CardTitle>Consistency</CardTitle>
-          <p className="text-4xl font-bold">
-            {fmt(result.consistency_score)}
-            {result.consistency_score !== null && (
-              <span className="text-base text-muted">/100</span>
-            )}
-          </p>
-          <p className="text-sm text-muted">
-            {result.consistency_score === null ? "Needs 2+ deliveries" : "Across this session"}
-          </p>
-        </Card>
+
+      <div className="grid grid-cols-2 divide-border overflow-hidden rounded-md border border-border bg-surface/70 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
+        <Kpi label="Technique" sub={`${ds.length} deliver${ds.length === 1 ? "y" : "ies"}`}>
+          <span data-testid="technique-score">{technique.toFixed(0)}</span>
+          <small>/100</small>
+        </Kpi>
+        <Kpi label="Injury load" sub={band.label}>
+          <span className={band.text}>{injury.toFixed(0)}</span>
+          <small>/100</small>
+        </Kpi>
+        <Kpi
+          label="Legality"
+          sub={
+            screened.length
+              ? `${screened.length - flagged} legal · ${flagged} not · max ${fmt(maxExt, 1, "°")}`
+              : "not screened"
+          }
+        >
+          <VerdictWord verdict={sessionVerdict(ds.map((d) => d.legality.verdict))} size="sm" />
+        </Kpi>
+        <Kpi
+          label="Consistency"
+          sub={result.consistency_score === null ? "needs 2+ balls" : "across session"}
+        >
+          {fmt(result.consistency_score)}
+          {result.consistency_score !== null && <small>/100</small>}
+        </Kpi>
+        <Kpi label="Fatigue" sub={result.fatigue.alert ? "alert" : "no drift alert"}>
+          <span className={result.fatigue.alert ? "text-warn" : undefined}>
+            {result.fatigue.fatigue_index.toFixed(0)}
+          </span>
+          <small>/100</small>
+        </Kpi>
+        <Kpi label="Top speed" sub={speeds.length ? "calibrated pitch" : "calibrate the pitch"}>
+          {speeds.length ? Math.max(...speeds).toFixed(0) : "—"}
+          {speeds.length > 0 && <small> km/h</small>}
+        </Kpi>
       </div>
 
-      <Card>
-        <CardTitle>Deliveries</CardTitle>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-muted">
-              <tr>
-                <th className="p-2 font-medium">#</th>
-                <th className="p-2 font-medium">Technique</th>
-                <th className="p-2 font-medium">Injury risk</th>
-                <th className="p-2 font-medium">Legality</th>
-                <th className="p-2 font-medium">Faults</th>
-                <th className="p-2 font-medium">Speed</th>
-                <th className="p-2 font-medium">Length</th>
-                <th className="p-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {ds.map((d, i) => {
-                const band = bandStyle[bandOf(d.injury.overall)];
-                return (
-                  <tr key={d.delivery_idx} className="border-t border-border">
-                    <td className="p-2">{d.delivery_idx + 1}</td>
-                    <td className="p-2">{d.technique_score.toFixed(0)}</td>
-                    <td className={`p-2 ${band.text}`}>
-                      {d.injury.overall.toFixed(0)} ({band.label})
-                    </td>
-                    <td className="p-2">
-                      <VerdictWord verdict={d.legality.verdict} size="sm" />
-                      {d.legality.screened && (
-                        <span className="ml-1 text-muted">
-                          {fmt(d.legality.elbow_extension_deg, 1, "°")}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2">{d.faults.map((f) => f.name).join(", ") || "None"}</td>
-                    <td className="p-2">{fmt(d.speed_kmh, 0, " km/h")}</td>
-                    <td className="p-2">{d.length ?? "—"}</td>
-                    <td className="p-2 text-right">
-                      {out.delivery_ids[i] && (
-                        <Link
-                          href={`/deliveries/${out.delivery_ids[i]}`}
-                          className="text-accent hover:underline"
-                        >
-                          Details
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel title="Deliveries" hint="Open one for the frame-by-frame workspace">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-[10px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 font-medium">#</th>
+                  <th className="px-3 py-2 font-medium">Technique</th>
+                  <th className="px-3 py-2 font-medium">Load</th>
+                  <th className="px-3 py-2 font-medium">Legality</th>
+                  <th className="px-3 py-2 font-medium">Release ht</th>
+                  <th className="px-3 py-2 font-medium">Stride</th>
+                  <th className="px-3 py-2 font-medium">Faults</th>
+                  <th className="px-3 py-2 font-medium">Speed · length</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {ds.map((d, i) => {
+                  const b = bandStyle[bandOf(d.injury.overall)];
+                  return (
+                    <tr
+                      key={d.delivery_idx}
+                      className="border-b border-border/60 hover:bg-surface-2/60"
+                    >
+                      <td className="px-3 py-2 font-display font-semibold">
+                        {String(d.delivery_idx + 1).padStart(2, "0")}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Bar value={d.technique_score} />
+                      </td>
+                      <td className={`tabular px-3 py-2 ${b.text}`}>
+                        {d.injury.overall.toFixed(0)} <span className="text-[11px]">{b.label}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <VerdictWord verdict={d.legality.verdict} size="sm" />
+                        {d.legality.screened && (
+                          <span className="tabular ml-1 text-muted">
+                            {fmt(d.legality.elbow_extension_deg, 1, "°")}
+                          </span>
+                        )}
+                      </td>
+                      <td className="tabular px-3 py-2">{fmt(d.release_height_pct, 0, "%")}</td>
+                      <td className="tabular px-3 py-2">{fmt(d.stride_pct, 0, "%")}</td>
+                      <td className="px-3 py-2">
+                        {d.faults.length ? (
+                          <span
+                            title={d.faults.map((f) => f.name).join(", ")}
+                            className="text-warn"
+                          >
+                            {d.faults.length} · {d.faults[0].name}
+                          </span>
+                        ) : (
+                          <span className="text-muted">None</span>
+                        )}
+                      </td>
+                      <td className="tabular px-3 py-2">
+                        {fmt(d.speed_kmh, 0, " km/h")} · {d.length ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {out.delivery_ids[i] && (
+                          <Link
+                            href={`/deliveries/${out.delivery_ids[i]}`}
+                            className="rounded-sm border border-accent/50 px-2 py-0.5 text-xs text-accent hover:bg-accent hover:text-background"
+                          >
+                            Details
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card>
-          <CardTitle>
-            Fatigue trend{" "}
-            {result.fatigue.alert && (
-              <Badge className="ml-2 border-warn/40 bg-warn/15 text-warn">Alert</Badge>
+        <div className="space-y-4">
+          <Panel title="Injury load">
+            <div className="flex justify-center">
+              <RiskGauge score={injury} />
+            </div>
+          </Panel>
+          <Panel title="Recurring faults" hint="How many deliveries show each">
+            {topFaults.length === 0 ? (
+              <p className="text-sm text-muted">No technique faults found.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {topFaults.map(([name, n]) => (
+                  <li key={name}>
+                    <div className="flex justify-between">
+                      <span>{name}</span>
+                      <span className="tabular text-muted">
+                        {n}/{ds.length}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 bg-surface-2">
+                      <div
+                        className="h-full bg-warn"
+                        style={{ width: `${(100 * n) / ds.length}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-          </CardTitle>
+          </Panel>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Panel
+          title="Fatigue drift"
+          hint={
+            result.workload.acwr !== null
+              ? `Workload ACWR ${result.workload.acwr.toFixed(2)}${result.workload.flagged ? " (high)" : ""}`
+              : result.workload.note
+          }
+          aside={
+            result.fatigue.alert ? (
+              <Badge className="border-warn/40 bg-warn/15 text-warn">Alert</Badge>
+            ) : undefined
+          }
+        >
           <FatigueTrend fatigue={result.fatigue} />
           {result.fatigue.alert_reasons.length > 0 && (
             <p className="mt-2 text-sm text-warn">{result.fatigue.alert_reasons.join(" ")}</p>
           )}
-          <p className="mt-2 text-xs text-muted">
-            Fatigue index {result.fatigue.fatigue_index.toFixed(0)}/100 · workload:{" "}
-            {result.workload.acwr !== null
-              ? `ACWR ${result.workload.acwr.toFixed(2)}${result.workload.flagged ? " (high)" : ""}`
-              : result.workload.note}
-          </p>
-        </Card>
-        <Card>
-          <CardTitle
-            aside={
-              <Button variant="ghost" onClick={() => setCalibrating((c) => !c)}>
-                {calibrating ? "Close" : "Calibrate pitch"}
-              </Button>
-            }
-          >
-            Pitch map
-          </CardTitle>
+        </Panel>
+        <Panel
+          title="Pitch map"
+          aside={
+            <Button variant="ghost" onClick={() => setCalibrating((c) => !c)}>
+              {calibrating ? "Close" : "Calibrate pitch"}
+            </Button>
+          }
+        >
           {calibrating ? (
             <CalibrationPanel
               sessionId={out.session.id}
@@ -321,54 +383,116 @@ function Results({
           ) : (
             <PitchMap deliveries={ds} />
           )}
-        </Card>
+        </Panel>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardTitle
-            aside={
-              <a
-                href={api.reportUrl(out.session.id)}
-                className="text-sm text-accent hover:underline"
-                download
-              >
-                Download PDF
-              </a>
-            }
-          >
-            Coach report
-          </CardTitle>
+        <Panel
+          title="Coach report"
+          hint={
+            result.coach_source === "ollama"
+              ? "Written by your local LLM coach"
+              : "Rule-based report (local LLM not used)"
+          }
+          aside={
+            <a
+              href={api.reportUrl(out.session.id)}
+              className="rounded-sm border border-border px-2.5 py-1 text-xs hover:border-accent"
+              download
+            >
+              Download PDF
+            </a>
+          }
+        >
           <div className="whitespace-pre-wrap text-sm leading-relaxed" data-testid="coach-report">
             {result.coach_report}
           </div>
-          <p className="mt-3 text-xs text-muted">
-            {result.coach_source === "ollama"
-              ? "Written by your local LLM coach."
-              : "Rule-based report (local LLM not used)."}
-          </p>
-        </Card>
-        <Card>
-          <CardTitle>Ask the coach</CardTitle>
+        </Panel>
+        <Panel title="Ask the coach" hint="Answers use this session's numbers">
           <CoachChat sessionId={out.session.id} />
-        </Card>
+        </Panel>
       </div>
       {result.similar_pros.length > 0 && (
-        <Card>
-          <CardTitle>Closest reference actions</CardTitle>
-          <ul className="space-y-1 text-sm">
+        <Panel
+          title="Closest reference actions"
+          aside={
+            <Link href="/compare" className="text-xs text-accent hover:underline">
+              Compare side by side
+            </Link>
+          }
+        >
+          <ul className="grid gap-3 sm:grid-cols-3">
             {result.similar_pros.map(([name, sim]) => (
-              <li key={name} className="flex justify-between">
-                <span>{name}</span>
-                <span className="text-muted">{sim.toFixed(0)}% similar</span>
+              <li key={name} className="text-sm">
+                <div className="flex justify-between">
+                  <span>{name}</span>
+                  <span className="tabular text-muted">{sim.toFixed(0)}%</span>
+                </div>
+                <div className="mt-1 h-1 bg-surface-2">
+                  <div className="h-full bg-accent" style={{ width: `${sim}%` }} />
+                </div>
               </li>
             ))}
           </ul>
-          <Link href="/compare" className="mt-2 inline-block text-sm text-accent hover:underline">
-            Compare side by side
-          </Link>
-        </Card>
+        </Panel>
       )}
+      <p className="text-[11px] text-muted">
+        Legality is 2D video screening, not the official ICC test (which uses 3D motion capture).
+        Injury load is a rule-based estimate, not medical advice.
+      </p>
     </>
+  );
+}
+
+function Kpi({ label, sub, children }: { label: string; sub: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b border-border px-4 py-3 lg:border-b-0">
+      <p className="font-display text-[10px] uppercase tracking-[0.16em] text-muted">{label}</p>
+      <p className="tabular mt-1 font-display text-3xl font-semibold leading-none [&_small]:ml-0.5 [&_small]:text-xs [&_small]:text-muted">
+        {children}
+      </p>
+      <p className="mt-1.5 truncate text-[11px] text-muted">{sub}</p>
+    </div>
+  );
+}
+
+function Bar({ value }: { value: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="tabular w-6">{value.toFixed(0)}</span>
+      <div className="h-1.5 w-20 bg-surface-2">
+        <div
+          className="h-full bg-accent"
+          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  hint,
+  aside,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-md border border-border bg-surface/70">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+        <div>
+          <h2 className="font-display text-sm font-semibold uppercase tracking-[0.14em]">
+            {title}
+          </h2>
+          {hint && <p className="text-[11px] text-muted">{hint}</p>}
+        </div>
+        {aside}
+      </header>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }

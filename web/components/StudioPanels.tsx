@@ -297,10 +297,16 @@ export function PhaseFilmstrip({
 }
 
 /** All biomechanical measurements, grouped by moment of the delivery. */
-export function MechanicsPanel({ metrics }: { metrics: BiomechMetric[] }) {
+export function MechanicsPanel({
+  metrics,
+  compact = false,
+}: {
+  metrics: BiomechMetric[];
+  compact?: boolean;
+}) {
   const groups = [...new Set(metrics.map((m) => m.group))];
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className={cn("grid gap-3", compact ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-3")}>
       {groups.map((g) => (
         <div key={g} className="rounded-sm border border-border bg-surface-2 p-3">
           <p className="mb-2 font-display text-xs uppercase tracking-widest text-accent">{g}</p>
