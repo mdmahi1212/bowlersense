@@ -193,20 +193,37 @@ def test_select_bowler_prefers_runner() -> None:
     assert chosen.track_id == 7
 
 
-def test_select_bowler_running_towards_camera() -> None:
-    """Front-on: the bowler barely moves sideways but grows and moves down the image; short
-    stray fragments (ID switches) mustn't win on a single fast jump."""
-    standing = [
-        PersonTrack(track_id=2, frames=list(range(200)), confs=[0.9] * 200,
-                    boxes=[(1100.0 + (i % 3), 400.0, 1180.0, 700.0) for i in range(200)])
-    ]  # fmt: skip
-    bowler = PersonTrack(
-        track_id=1, frames=list(range(200)), confs=[0.9] * 200,
-        boxes=[(950.0 - 0.6 * i, 400.0 + 0.5 * i, 1010.0 + 0.6 * i, 600.0 + 1.5 * i)
-               for i in range(200)],
-    )  # fmt: skip
-    fragment = _track(7, [900.0 + (40.0 if i % 2 else 0.0) for i in range(30)], start=160)
-    assert select_bowler([*standing, bowler, fragment], 1920, min_frames=10).track_id == 1
+def test_learned_selector_scores_and_picks() -> None:
+    """The shipped selector loads, scores every usable track and prefers the runner over a
+    standing umpire and a slow walker."""
+    from bowlsense.detect.selector import FEATURES, feature_matrix, load_selector
+
+    s = _settings()
+    path = s.storage.models_path / s.detect.selector_model
+    if not path.is_file():
+        pytest.skip("bowler_selector.json not trained")
+    umpire = _track(1, [900.0 + (i % 3) for i in range(200)])
+    bowler = _track(7, [100.0 + 6.0 * i for i in range(150)])
+    fielder = _track(3, [500.0 + 1.0 * i for i in range(200)])
+    tracks = [umpire, bowler, fielder]
+    assert feature_matrix(tracks, 1920, 1080, 200).shape == (3, len(FEATURES))
+    scorer = load_selector(path)
+    scores = scorer.scores(tracks, 1920, 1080, 200)
+    assert scores.shape == (3,) and ((scores >= 0) & (scores <= 1)).all()
+    chosen = select_bowler(tracks, 1920, 10, scorer=scorer, frame_height=1080, n_frames=200)
+    assert chosen.track_id == 7
+
+
+def test_selector_rejects_other_features(tmp_path: Path) -> None:
+    import json
+
+    from bowlsense.detect.selector import load_selector
+
+    bad = tmp_path / "sel.json"
+    bad.write_text(json.dumps({"feature_version": 0, "features": ["x"], "mean": [0],
+                               "scale": [1], "coef": [1], "intercept": 0}))  # fmt: skip
+    with pytest.raises(ValueError, match="retrain"):
+        load_selector(bad)
 
 
 def test_select_bowler_override_and_errors() -> None:

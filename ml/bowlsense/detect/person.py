@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from bowlsense.config import DetectSettings
 from bowlsense.errors import ModelNotFoundError, NoBowlerDetectedError
+from bowlsense.geometry.angles import FloatArray
 from bowlsense.io.video import Frame, iter_frames
 
 log = logging.getLogger(__name__)
@@ -131,22 +132,12 @@ def track_motion(track: PersonTrack, frame_width: int) -> tuple[float, float]:
     return displacement, peak
 
 
-def track_features(track: PersonTrack) -> tuple[float, float]:
-    """(2D extent, size change) of a track, both camera-distance independent.
+class TrackScorer(Protocol):
+    """Anything that scores tracks as "bowler" (e.g. ``detect.selector.BowlerSelector``)."""
 
-    Extent: how far the box centre travels (5th-95th percentile range in x and y) in units
-    of the person's median box height. Size change: log of the 95th / 5th percentile box
-    height, large when someone runs towards or away from the camera.
-    """
-    if len(track.frames) < 2:
-        return 0.0, 0.0
-    b = np.asarray(track.boxes, dtype=np.float64)
-    h = np.maximum(b[:, 3] - b[:, 1], 1.0)
-    cx, cy = (b[:, 0] + b[:, 2]) / 2.0, (b[:, 1] + b[:, 3]) / 2.0
-    span = np.hypot(np.ptp(np.percentile(cx, [5, 95])), np.ptp(np.percentile(cy, [5, 95])))
-    extent = float(span / np.median(h))
-    size = float(np.log(np.percentile(h, 95) / np.percentile(h, 5)))
-    return extent, size
+    def scores(
+        self, tracks: list[PersonTrack], width: int, height: int, n_frames: int
+    ) -> FloatArray: ...
 
 
 def select_bowler(
@@ -154,14 +145,18 @@ def select_bowler(
     frame_width: int,
     min_frames: int,
     override_id: int | None = None,
+    *,
+    scorer: TrackScorer | None = None,
+    frame_height: int = 0,
+    n_frames: int = 0,
 ) -> PersonTrack:
     """The bowler, or the ``override_id`` track if given.
 
-    Each usable track is scored on three things, each normalised by the best track:
-    how far it moves across the image (any direction, in body heights, so a side-on run-up
-    and a run towards the camera both count), how much its size changes (approaching or
-    leaving the camera) and how much of the clip it covers (the bowler is the subject).
-    ``frame_width`` is kept for the API; the features are scale-free.
+    With a ``scorer`` (the selector trained on labelled match footage) the top-scoring track
+    is chosen. Otherwise the rule: largest horizontal displacement plus highest peak
+    horizontal speed, each normalised by the best among the tracks. On 279 labelled match
+    deliveries the rule picked the bowler 70.6% of the time (the tracker had the bowler
+    93.9% of the time); see ``data/training/reports``.
 
     Raises:
         NoBowlerDetectedError: if no usable track exists or ``override_id`` isn't one.
@@ -180,18 +175,22 @@ def select_bowler(
             f"No person was tracked for at least {min_frames} frames "
             f"({len(tracks)} short track(s) found)."
         )
-    feats = [track_features(t) for t in usable]
-    longest = max(len(t.frames) for t in usable)
-    max_extent = max(f[0] for f in feats) or 1.0
-    max_size = max(f[1] for f in feats) or 1.0
-    scores = [
-        e / max_extent + sz / max_size + len(t.frames) / longest
-        for (e, sz), t in zip(feats, usable, strict=True)
-    ]
+    if scorer is not None:
+        height = frame_height or frame_width
+        span = n_frames or max(t.frames[-1] for t in usable) + 1
+        scores = [float(v) for v in scorer.scores(usable, frame_width, height, span)]
+        method = "learned"
+    else:
+        motions = [track_motion(t, frame_width) for t in usable]
+        max_disp = max(m[0] for m in motions) or 1.0
+        max_speed = max(m[1] for m in motions) or 1.0
+        scores = [d / max_disp + sp / max_speed for d, sp in motions]
+        method = "rule"
     best = int(np.argmax(scores))
     log.info(
-        "bowler: track %d (score %.2f of %d tracks)",
+        "bowler: track %d (%s score %.2f of %d tracks)",
         usable[best].track_id,
+        method,
         scores[best],
         len(usable),
     )

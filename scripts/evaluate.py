@@ -263,6 +263,17 @@ def real_rows() -> tuple[list[Row], dict[str, Any]]:
         arm = real.get(key)
         if isinstance(arm, dict) and arm.get("accuracy") is not None:
             rows.append((f"Bowling arm, real ({label})", pct(arm["accuracy"]), str(arm["n"]), note))
+    learned = data.get("bowler_selector", {}).get("test_selection_accuracy")
+    if isinstance(learned, dict):
+        rows.append(
+            (
+                "Bowler picked correctly (real, learned)",
+                f"{pct(learned['learned'])} (rule {pct(learned['legacy'])}, "
+                f"tracker limit {pct(learned['tracker_limit'])})",
+                str(data["bowler_selector"]["test_deliveries"]),
+                "held-out test videos",
+            )
+        )
     view = data.get("pipeline_on_real_footage", {}).get("camera_view")
     if isinstance(view, dict):
         rows.append(

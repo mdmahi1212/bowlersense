@@ -23,6 +23,7 @@ from bowlsense.analysis.legality import assess_legality
 from bowlsense.config import Settings
 from bowlsense.detect.ball import YoloBallDetector, track_ball
 from bowlsense.detect.person import select_bowler, track_people_in_video
+from bowlsense.detect.selector import load_selector
 from bowlsense.errors import InvalidInputError
 from bowlsense.geometry.angles import FloatArray, keypoint_track
 from bowlsense.geometry.body import (
@@ -143,9 +144,12 @@ def extract_pose(
         name = backend or settings.pose.backend
         models = settings.storage.models_path
         tracks = track_people_in_video(video, models, settings.detect)
+        selector_file = models / settings.detect.selector_model
+        scorer = load_selector(selector_file) if selector_file.is_file() else None
         bowler = select_bowler(
-            tracks, info.width, settings.detect.min_track_frames, bowler_track_id
-        )
+            tracks, info.width, settings.detect.min_track_frames, bowler_track_id,
+            scorer=scorer, frame_height=info.height, n_frames=info.frame_count,
+        )  # fmt: skip
         track_id, used_backend = bowler.track_id, name
         pose = load_backend(name, settings.pose, models)
         empty = dict.fromkeys(KEYPOINT_NAMES)

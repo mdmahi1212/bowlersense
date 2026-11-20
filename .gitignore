@@ -30,6 +30,7 @@ models/*
 !models/phase_model.json
 !models/delivery_type_seq.pt
 !models/delivery_type_seq.json
+!models/bowler_selector.json
 out/
 results/
 ml/tests/data/real/*

@@ -15,6 +15,7 @@ detect:
   person_conf: 0.3
   tracker: bytetrack.yaml         # bundled with ultralytics
   min_track_frames: 10            # shorter tracks are ignored when picking the bowler
+  selector_model: bowler_selector.json  # learned bowler selection (train/train_bowler_select.py); rules if absent
 pose:
   backend: rtm          # rtm | mediapipe
   crop_padding: 0.2     # bowler bbox is padded by 20% on each side before pose estimation

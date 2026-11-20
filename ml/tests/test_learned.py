@@ -365,3 +365,18 @@ def test_fill_boxes_interpolates_short_gaps() -> None:
     out = fill_boxes(boxes, 0, 30, max_gap=5)
     assert out[2] == pytest.approx((2.0, 0.0, 12.0, 10.0))
     assert 10 not in out  # 26-frame gap is too long to bridge
+
+
+def test_bowler_benchmark_matching() -> None:
+    from bowlsense.detect.person import PersonTrack
+    from train.eval_bowler import iou, match_fraction
+
+    assert iou((0, 0, 10, 10), (0, 0, 10, 10)) == pytest.approx(1.0)
+    assert iou((0, 0, 10, 10), (5, 0, 15, 10)) == pytest.approx(50 / 150)
+    assert iou((0, 0, 1, 1), (5, 5, 6, 6)) == 0.0
+    track = PersonTrack(track_id=1, frames=[0, 1, 2], confs=[1.0] * 3,
+                        boxes=[(0, 0, 10, 10), (0, 0, 10, 10), (50, 50, 60, 60)])  # fmt: skip
+    labels = {0: (0.0, 0.0, 10.0, 10.0), 1: (1.0, 0.0, 11.0, 10.0), 2: (0.0, 0.0, 10.0, 10.0),
+              3: (0.0, 0.0, 10.0, 10.0)}  # fmt: skip
+    assert match_fraction(track, labels) == pytest.approx(0.5)
+    assert match_fraction(track, {}) == 0.0

@@ -82,6 +82,7 @@ class DetectSettings(_Section):
     person_conf: float = Field(gt=0, lt=1)
     tracker: str = Field(min_length=1)
     min_track_frames: int = Field(ge=1)
+    selector_model: str = Field(min_length=1)
 
 
 class PoseSettings(_Section):

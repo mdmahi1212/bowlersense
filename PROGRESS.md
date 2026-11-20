@@ -1,5 +1,25 @@
 # BowlSense — Progress
 
+## Real-footage validation: bowler selection ✅ (2026-11-20)
+
+- **Why:** a user clip failed because the wrong person was picked as the bowler, and the synthetic tests can't catch that. The dataset labels the bowler's box in every frame, so this step can now be measured.
+- **Benchmark** (`train/eval_bowler.py`): every labelled delivery (279) is tracked over the app's clip window (YOLO + ByteTrack, cached in `data/training/tracks/`). The chosen track is scored against the labelled box: IoU ≥ 0.5 in ≥ 50 % of the labelled frames.
+  - Old horizontal-motion rule: **70.6 %**.
+  - A hand-tuned rule I wrote for the failing clip: **60.2 %**, worse, so it was reverted.
+  - The tracker itself has the bowler 93.9 % of the time.
+- **Learned selector** (`detect/selector.py`, `train/train_bowler_select.py`):
+  - Per-track features: horizontal and 2D motion, speed, size change, coverage, size, position, plus the same features relative to the other people in the clip.
+  - Model: logistic regression with C chosen by grouped CV on the train videos, stored as plain JSON (`models/bowler_selector.json`).
+  - Held-out test videos (85 deliveries): **83.5 %** vs 69.4 % for the rule (tracker limit 91.8 %). When the bowler is tracked, 91.0 % vs 75.6 %.
+  - Used automatically when the model file is present; otherwise the rule is used.
+- **Known gap:** the user's close-up phone clip of a bowler running straight at the camera is still picked wrongly (0.78 vs 0.76 for the bowler); the old rule fails on it too. That kind of footage isn't in the training data. Next step: a gold test set of the user's own side-on, high-fps clips with labels.
+- Also fixed:
+  - height and alignment calibration fall back to other frames instead of failing;
+  - input errors aren't retried 3×;
+  - legality is "not screened" (never flagged) on clips that can't be measured;
+  - the worker survives sessions deleted mid-job;
+  - GPU builds for NVIDIA (setup auto-detects).
+
 ## Status: all 16 phases complete ✅ (2026-11-20)
 
 `python scripts/setup.py` → `python scripts/download_models.py` → `python run.py` gives a working local app. `scripts/check.py` runs:
