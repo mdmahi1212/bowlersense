@@ -279,10 +279,22 @@ class FatigueSettings(_Section):
         return self
 
 
+class SpellGuideline(_Section):
+    """Fast-bowling limits for bowlers up to ``max_age`` (inclusive)."""
+
+    max_age: int = Field(ge=5, le=30)
+    overs_per_spell: int = Field(ge=1)
+    overs_per_day: int = Field(ge=1)
+
+
 class WorkloadSettings(_Section):
-    """Acute:chronic workload ratio."""
+    """Acute:chronic workload ratio, junior spell limits and the drill-plan shape."""
 
     acwr_flag: float = Field(gt=0)
+    spell_guidelines: tuple[SpellGuideline, ...] = ()
+    plan_weeks: int = Field(default=4, ge=1, le=12)
+    plan_sessions_per_week: int = Field(default=3, ge=1, le=7)
+    plan_recent_sessions: int = Field(default=5, ge=1, le=50)
     acute_days: int = Field(ge=1)
     chronic_days: int = Field(ge=1)
     min_history_days: int = Field(ge=1)
@@ -321,6 +333,13 @@ class DeliverySettings(_Section):
     position_error_px: float = Field(gt=0)
     max_length_error_m: float = Field(gt=0)
     max_line_error_m: float = Field(gt=0)
+    assumed_height_m: float = Field(default=1.75, gt=1.0, lt=2.5)
+    rough_speed_window_s: float = Field(default=0.08, gt=0, le=0.5)
+    rough_speed_range_kmh: tuple[float, float] = (30.0, 170.0)
+    crease_white_v_min: int = Field(default=170, ge=0, le=255)
+    crease_white_s_max: int = Field(default=70, ge=0, le=255)
+    crease_min_angle_deg: float = Field(default=35, ge=0, le=90)
+    crease_min_length_h: float = Field(default=0.05, gt=0, le=1)
 
     @model_validator(mode="after")
     def _check(self) -> DeliverySettings:

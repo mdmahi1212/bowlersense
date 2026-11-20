@@ -22,6 +22,7 @@ export interface BowlSense {
   DeliveryOut?: DeliveryOut;
   DeliveryTypeResult?: DeliveryTypeResult;
   Drill?: Drill;
+  DrillPlan?: DrillPlan;
   EvaluationReport?: EvaluationReport;
   FatigueDrift?: FatigueDrift;
   FatigueInput?: FatigueInput;
@@ -29,6 +30,8 @@ export interface BowlSense {
   Fault?: Fault;
   FaultReport?: FaultReport;
   FramePose?: FramePose;
+  Goal?: Goal;
+  GoalsIn?: GoalsIn;
   ImageAnalysis?: ImageAnalysis;
   ImageCheck?: ImageCheck;
   InjuryFeatures?: InjuryFeatures;
@@ -39,6 +42,8 @@ export interface BowlSense {
   LocalSettings?: LocalSettings;
   PeopleTracks?: PeopleTracks;
   PhaseEvents?: PhaseEvents;
+  PlanItem?: PlanItem;
+  PlanSession?: PlanSession;
   PoseSequence?: PoseSequence;
   ProgressDelivery?: ProgressDelivery;
   ProgressOut?: ProgressOut;
@@ -52,6 +57,7 @@ export interface BowlSense {
   SessionRecord?: SessionRecord;
   SessionResult?: SessionResult;
   SettingsOut?: SettingsOut;
+  SpellLimit?: SpellLimit;
   TrackedPerson?: TrackedPerson;
   WorkloadOut?: WorkloadOut;
   WorkloadPoint?: WorkloadPoint;
@@ -97,14 +103,16 @@ export interface AngleSeries {
  * via the `definition` "Annotation".
  */
 export interface Annotation {
-  kind: "line" | "angle";
+  kind: "line" | "angle" | "note";
   frame: number;
   /**
-   * @minItems 2
+   * @minItems 1
    * @maxItems 3
    */
   points:
-    [[number, number], [number, number]] | [[number, number], [number, number], [number, number]];
+    | [[number, number]]
+    | [[number, number], [number, number]]
+    | [[number, number], [number, number], [number, number]];
   label: string;
 }
 /**
@@ -467,6 +475,20 @@ export interface DeliveryMetrics {
   };
   biomechanics: BiomechMetric[];
   biomech_curves: AngleSeries[];
+  speed_estimate_kmh: number | null;
+  no_ball: NoBallResult | null;
+}
+/**
+ * Outcome of the front-foot check.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "NoBallResult".
+ */
+export interface NoBallResult {
+  status: "legal" | "no_ball" | "not_found";
+  margin_cm: number | null;
+  line: [number, number][] | null;
+  note: string;
 }
 /**
  * One delivery with what the detail page needs from its session.
@@ -498,6 +520,41 @@ export interface Drill {
   name: string;
   description: string;
   reps: string;
+}
+/**
+ * A multi-week drill plan built from a bowler's recurring faults.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "DrillPlan".
+ */
+export interface DrillPlan {
+  created: string;
+  faults: string[];
+  sessions: PlanSession[];
+}
+/**
+ * One practice session of the plan.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "PlanSession".
+ */
+export interface PlanSession {
+  week: number;
+  session: number;
+  items: PlanItem[];
+}
+/**
+ * One drill in the plan.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "PlanItem".
+ */
+export interface PlanItem {
+  fault: string;
+  drill: string;
+  description: string;
+  reps: string;
+  done: boolean;
 }
 /**
  * The full evaluation shown on the "Model evaluation" page.
@@ -640,6 +697,152 @@ export interface Keypoint {
   y: number;
   z: number | null;
   conf: number;
+}
+/**
+ * A target on one progress measure, e.g. technique above 75.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "Goal".
+ */
+export interface Goal {
+  metric:
+    | "technique"
+    | "injury"
+    | "elbow_extension_max"
+    | "release_height_pct"
+    | "stride_pct"
+    | "arm_speed_deg_s";
+  op: "above" | "below";
+  target: number;
+  label: string;
+}
+/**
+ * A bowler's goals (``PUT`` replaces them all).
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "GoalsIn".
+ */
+export interface GoalsIn {
+  /**
+   * @maxItems 20
+   */
+  goals:
+    | []
+    | [Goal]
+    | [Goal, Goal]
+    | [Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal, Goal]
+    | [
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal
+      ]
+    | [
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal
+      ]
+    | [
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal
+      ]
+    | [
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal
+      ]
+    | [
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal,
+        Goal
+      ];
 }
 /**
  * Result of analysing one image.
@@ -941,7 +1144,19 @@ export interface SettingsOut {
   };
 }
 /**
- * A bowler's workload history.
+ * The junior fast-bowling limits that apply to a bowler's age.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "SpellLimit".
+ */
+export interface SpellLimit {
+  age: number;
+  max_age: number;
+  overs_per_spell: number;
+  overs_per_day: number;
+}
+/**
+ * A bowler's workload history (and spell limits when their age is known).
  *
  * This interface was referenced by `BowlSense`'s JSON-Schema
  * via the `definition` "WorkloadOut".
@@ -956,6 +1171,7 @@ export interface WorkloadOut {
   safe_band: [number, number];
   flag_above: number;
   latest: WorkloadResult | null;
+  spell_limit: SpellLimit | null;
 }
 /**
  * ACWR on one day with a session.

@@ -131,6 +131,16 @@ fatigue:
   weights: {runup_speed: 0.3, release_height: 0.2, wrist_speed: 0.3, technique_score: 0.2}
 workload:
   acwr_flag: 1.5
+  # Fast-bowling spell limits by age (overs per spell, overs per day). Defaults follow the
+  # ECB fast bowling directives for juniors; check your board's current guidance.
+  spell_guidelines:
+    - {max_age: 12, overs_per_spell: 5, overs_per_day: 10}
+    - {max_age: 14, overs_per_spell: 6, overs_per_day: 12}
+    - {max_age: 16, overs_per_spell: 7, overs_per_day: 18}
+    - {max_age: 18, overs_per_spell: 7, overs_per_day: 18}
+  plan_weeks: 4              # drill plan length
+  plan_sessions_per_week: 3  # practice sessions per week in the drill plan
+  plan_recent_sessions: 5    # recurring faults are counted over this many recent sessions
   acute_days: 7
   chronic_days: 28
   min_history_days: 21        # ACWR needs at least this much history; otherwise not reported
@@ -144,6 +154,13 @@ delivery:
   position_error_px: 2.0       # assumed bounce-point error in the image...
   max_length_error_m: 0.5      # ...report length only if it moves the bounce less than this
   max_line_error_m: 0.15       # ...and line only if less than this (stumps are 0.23 m wide)
+  assumed_height_m: 1.75       # body height used to scale rough (uncalibrated) speeds and distances
+  rough_speed_window_s: 0.08   # rough speed: ball travel over this long after release (side view only)
+  rough_speed_range_kmh: [30, 170]  # rough speeds outside this range are treated as tracking errors
+  crease_white_v_min: 170      # no-ball check: crease pixels are at least this bright (HSV value)...
+  crease_white_s_max: 70       # ...and at most this saturated
+  crease_min_angle_deg: 35     # the crease is seen receding from a side-on camera: steep in the image
+  crease_min_length_h: 0.05    # shortest crease segment (fraction of body height)
 compare:
   resample_points: 50          # each action is time-normalised (BFC -> follow-through end) to this many points
   similarity_scale: 2.0        # similarity % = 100 * exp(-dtw_distance / scale)

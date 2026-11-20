@@ -65,6 +65,9 @@
     "Drill": {
       "$ref": "#/$defs/Drill"
     },
+    "DrillPlan": {
+      "$ref": "#/$defs/DrillPlan"
+    },
     "EvaluationReport": {
       "$ref": "#/$defs/EvaluationReport"
     },
@@ -85,6 +88,12 @@
     },
     "FramePose": {
       "$ref": "#/$defs/FramePose"
+    },
+    "Goal": {
+      "$ref": "#/$defs/Goal"
+    },
+    "GoalsIn": {
+      "$ref": "#/$defs/GoalsIn"
     },
     "ImageAnalysis": {
       "$ref": "#/$defs/ImageAnalysis"
@@ -115,6 +124,12 @@
     },
     "PhaseEvents": {
       "$ref": "#/$defs/PhaseEvents"
+    },
+    "PlanItem": {
+      "$ref": "#/$defs/PlanItem"
+    },
+    "PlanSession": {
+      "$ref": "#/$defs/PlanSession"
     },
     "PoseSequence": {
       "$ref": "#/$defs/PoseSequence"
@@ -154,6 +169,9 @@
     },
     "SettingsOut": {
       "$ref": "#/$defs/SettingsOut"
+    },
+    "SpellLimit": {
+      "$ref": "#/$defs/SpellLimit"
     },
     "TrackedPerson": {
       "$ref": "#/$defs/TrackedPerson"
@@ -322,7 +340,8 @@
         "kind": {
           "enum": [
             "line",
-            "angle"
+            "angle",
+            "note"
           ],
           "title": "Kind",
           "type": "string"
@@ -347,13 +366,13 @@
             "type": "array"
           },
           "maxItems": 3,
-          "minItems": 2,
+          "minItems": 1,
           "title": "Points",
           "type": "array"
         },
         "label": {
           "default": "",
-          "maxLength": 60,
+          "maxLength": 500,
           "title": "Label",
           "type": "string"
         }
@@ -1403,6 +1422,29 @@
           },
           "title": "Biomech Curves",
           "type": "array"
+        },
+        "speed_estimate_kmh": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speed Estimate Kmh"
+        },
+        "no_ball": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NoBallResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1432,7 +1474,9 @@
         "comparisons",
         "keyframes",
         "biomechanics",
-        "biomech_curves"
+        "biomech_curves",
+        "speed_estimate_kmh",
+        "no_ball"
       ],
       "title": "DeliveryMetrics",
       "type": "object"
@@ -1557,6 +1601,37 @@
         "reps"
       ],
       "title": "Drill",
+      "type": "object"
+    },
+    "DrillPlan": {
+      "description": "A multi-week drill plan built from a bowler's recurring faults.",
+      "properties": {
+        "created": {
+          "format": "date-time",
+          "title": "Created",
+          "type": "string"
+        },
+        "faults": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Faults",
+          "type": "array"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/PlanSession"
+          },
+          "title": "Sessions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "created",
+        "faults",
+        "sessions"
+      ],
+      "title": "DrillPlan",
       "type": "object"
     },
     "EvaluationReport": {
@@ -1943,6 +2018,67 @@
         "keypoints"
       ],
       "title": "FramePose",
+      "type": "object"
+    },
+    "Goal": {
+      "description": "A target on one progress measure, e.g. technique above 75.",
+      "properties": {
+        "metric": {
+          "enum": [
+            "technique",
+            "injury",
+            "elbow_extension_max",
+            "release_height_pct",
+            "stride_pct",
+            "arm_speed_deg_s"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "above",
+            "below"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "number"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "metric",
+        "op",
+        "target",
+        "label"
+      ],
+      "title": "Goal",
+      "type": "object"
+    },
+    "GoalsIn": {
+      "description": "A bowler's goals (``PUT`` replaces them all).",
+      "properties": {
+        "goals": {
+          "items": {
+            "$ref": "#/$defs/Goal"
+          },
+          "maxItems": 20,
+          "title": "Goals",
+          "type": "array"
+        }
+      },
+      "required": [
+        "goals"
+      ],
+      "title": "GoalsIn",
       "type": "object"
     },
     "ImageAnalysis": {
@@ -2591,6 +2727,70 @@
       "title": "LocalSettings",
       "type": "object"
     },
+    "NoBallResult": {
+      "additionalProperties": false,
+      "description": "Outcome of the front-foot check.",
+      "properties": {
+        "status": {
+          "enum": [
+            "legal",
+            "no_ball",
+            "not_found"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "margin_cm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Margin Cm"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "margin_cm",
+        "line",
+        "note"
+      ],
+      "title": "NoBallResult",
+      "type": "object"
+    },
     "PeopleTracks": {
       "additionalProperties": false,
       "description": "Everyone tracked in a session's video, and which one was analysed as the bowler.",
@@ -2711,6 +2911,70 @@
         "confidence"
       ],
       "title": "PhaseEvents",
+      "type": "object"
+    },
+    "PlanItem": {
+      "description": "One drill in the plan.",
+      "properties": {
+        "fault": {
+          "title": "Fault",
+          "type": "string"
+        },
+        "drill": {
+          "title": "Drill",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "reps": {
+          "title": "Reps",
+          "type": "string"
+        },
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fault",
+        "drill",
+        "description",
+        "reps",
+        "done"
+      ],
+      "title": "PlanItem",
+      "type": "object"
+    },
+    "PlanSession": {
+      "description": "One practice session of the plan.",
+      "properties": {
+        "week": {
+          "minimum": 1,
+          "title": "Week",
+          "type": "integer"
+        },
+        "session": {
+          "minimum": 1,
+          "title": "Session",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/PlanItem"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "week",
+        "session",
+        "items"
+      ],
+      "title": "PlanSession",
       "type": "object"
     },
     "PoseSequence": {
@@ -3621,6 +3885,35 @@
       "title": "SettingsOut",
       "type": "object"
     },
+    "SpellLimit": {
+      "description": "The junior fast-bowling limits that apply to a bowler's age.",
+      "properties": {
+        "age": {
+          "title": "Age",
+          "type": "integer"
+        },
+        "max_age": {
+          "title": "Max Age",
+          "type": "integer"
+        },
+        "overs_per_spell": {
+          "title": "Overs Per Spell",
+          "type": "integer"
+        },
+        "overs_per_day": {
+          "title": "Overs Per Day",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "age",
+        "max_age",
+        "overs_per_spell",
+        "overs_per_day"
+      ],
+      "title": "SpellLimit",
+      "type": "object"
+    },
     "TrackedPerson": {
       "additionalProperties": false,
       "description": "One person the tracker followed: their box (x1, y1, x2, y2) in each frame seen.",
@@ -3669,7 +3962,7 @@
       "type": "object"
     },
     "WorkloadOut": {
-      "description": "A bowler's workload history.",
+      "description": "A bowler's workload history (and spell limits when their age is known).",
       "properties": {
         "bowler_id": {
           "title": "Bowler Id",
@@ -3713,6 +4006,17 @@
               "type": "null"
             }
           ]
+        },
+        "spell_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpellLimit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3720,7 +4024,8 @@
         "points",
         "safe_band",
         "flag_above",
-        "latest"
+        "latest",
+        "spell_limit"
       ],
       "title": "WorkloadOut",
       "type": "object"

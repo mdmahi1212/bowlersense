@@ -11,6 +11,7 @@ import { Empty, ErrorBox, Loading } from "@/components/ui/States";
 import { api, errorText } from "@/lib/api";
 import type { BowlerRecord } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
+import { DrillPlanPanel, GoalsPanel } from "@/components/PlanGoals";
 import { ProgressPanel } from "@/components/ProgressPanel";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { fmtDate } from "@/lib/utils";
@@ -90,6 +91,18 @@ function BowlerDetail({ bowler }: { bowler: BowlerRecord }) {
         ) : (
           !progress.error && <Loading />
         )}
+      </section>
+      <section>
+        <SectionHead
+          n="02"
+          title="Goals"
+          hint="Targets checked against every session (green = met)"
+        />
+        <GoalsPanel bowlerId={bowler.id} progress={progress.data ?? null} />
+      </section>
+      <section>
+        <SectionHead n="03" title="Drill plan" hint="Built from the faults that keep coming up" />
+        <DrillPlanPanel bowlerId={bowler.id} />
       </section>
       <Card>
         <CardTitle>Workload (acute : chronic ratio)</CardTitle>

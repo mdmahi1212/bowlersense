@@ -21,11 +21,12 @@ from bowlsense.analysis.fatigue import assess_fatigue, assess_workload, delivery
 from bowlsense.analysis.faults import assess_faults
 from bowlsense.analysis.injury import assess_injury, injury_features
 from bowlsense.analysis.legality import assess_legality
+from bowlsense.analysis.noball import detect_no_ball, rough_speed_kmh
 from bowlsense.config import Settings
 from bowlsense.detect.ball import YoloBallDetector, track_ball
 from bowlsense.detect.person import select_bowler, track_people_in_video
 from bowlsense.detect.selector import load_selector
-from bowlsense.errors import InvalidInputError
+from bowlsense.errors import BowlSenseError, InvalidInputError
 from bowlsense.geometry.angles import FloatArray, keypoint_track
 from bowlsense.geometry.body import (
     BowlingArmResult,
@@ -38,7 +39,7 @@ from bowlsense.geometry.body import (
 from bowlsense.geometry.pitch import PitchCalibration
 from bowlsense.io.quality import check_pose, check_video, estimate_view
 from bowlsense.io.slowmo import SlowMotion, estimate_slowmo, retime
-from bowlsense.io.video import VideoInfo, iter_frames, probe_video
+from bowlsense.io.video import VideoInfo, iter_frames, probe_video, read_frame
 from bowlsense.phases.heuristic import detect_phases
 from bowlsense.phases.model import load_phase_model
 from bowlsense.phases.seqclf import load_classifier
@@ -56,6 +57,7 @@ from bowlsense.schemas import (
     DeliveryTypeResult,
     FatigueResult,
     FramePose,
+    NoBallResult,
     PeopleTracks,
     PoseSequence,
     SessionResult,
@@ -491,7 +493,38 @@ def delivery_metrics(
         biomech_curves=(
             biomech_curves(clip, settings.pose.savgol_window_s) if settings is not None else []
         ),
+        speed_estimate_kmh=(
+            rough_speed_kmh(
+                analysis.ball_track.points,
+                window.start + analysis.phases.release,
+                clip.fps,
+                analysis.height_px,
+                clip.view,
+                settings.delivery,
+            )
+            if settings is not None
+            and analysis.ball_track is not None
+            and not (ball and ball.speed_kmh is not None)
+            else None
+        ),
     )
+
+
+def front_foot_check(
+    video: Path,
+    cleaned: PoseSequence,
+    window: ClipWindow,
+    analysis: DeliveryAnalysis,
+    settings: Settings,
+) -> NoBallResult | None:
+    """Auto-detected crease no-ball screen at this delivery's front-foot contact."""
+    ffc = window.start + analysis.phases.ffc
+    pose = next((f for f in cleaned.frames if f.frame_idx == ffc), None)
+    try:
+        frame = read_frame(video, ffc)
+    except BowlSenseError:
+        return None
+    return detect_no_ball(frame, pose, cleaned.bowling_arm, analysis.height_px, settings.delivery)
 
 
 def similar_actions(deliveries: Sequence[DeliveryAnalysis]) -> list[tuple[str, float]]:
@@ -564,7 +597,15 @@ def run_pipeline(
         report_deliveries.append(
             ReportDelivery(index=i, analysis=delivery, sequence=clip, keyframes=keyframes)
         )
-        metrics.append(delivery_metrics(i, delivery, clip, session.windows[i], rel, settings))
+        metrics.append(
+            delivery_metrics(i, delivery, clip, session.windows[i], rel, settings).model_copy(
+                update={
+                    "no_ball": front_foot_check(
+                        video, cleaned, session.windows[i], delivery, settings
+                    )
+                }
+            )
+        )
     report(88, "writing coach report")
     seq = front.sequence
     summary = summarise_session(
@@ -671,6 +712,7 @@ def reanalyse_delivery(
         update={
             "speed_kmh": old.speed_kmh, "length": old.length, "line": old.line,
             "pitch_xy": old.pitch_xy, "ball_notes": old.ball_notes, "ball_track": old.ball_track,
+            "no_ball": front_foot_check(video, cleaned, window, analysis, settings),
         }
     )  # fmt: skip
     deliveries = list(result.deliveries)

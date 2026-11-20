@@ -232,6 +232,27 @@ def build_report(data: ReportInput, path: Path, chart_dir: Path, threshold_deg: 
             missing = ", ".join(f"{k} ({v})" for k, v in a.faults.not_measured.items())
             story.append(para(f"Not measured from this view: {missing}", note))
 
+        rel = min(max(0, a.phases.release), len(d.sequence.frames) - 1)
+        at_release = [
+            ("Bowling elbow", float(elbow_angles(d.sequence)[rel]), "deg"),
+            ("Front knee", float(front_knee_angles(d.sequence)[rel]), "deg"),
+            ("Trunk lean", float(trunk_lean(d.sequence)[rel]), "deg"),
+            ("Release height", a.faults.measurements.get("LOW_RELEASE", float("nan")), "% height"),
+            (
+                "Stride",
+                a.faults.measurements.get("OVERSTRIDE", a.faults.measurements.get("UNDERSTRIDE",
+                                                                                 float("nan"))),
+                "% height",
+            ),
+        ]  # fmt: skip
+        rows: list[list[Any]] = [["At the release frame", "Value"]]
+        rows += [
+            [name, f"{v:.1f} {unit}" if np.isfinite(v) else "not measured"]
+            for name, v, unit in at_release
+        ]
+        story += [Paragraph("Release angles", styles["Heading3"]),
+                  table(rows, [60 * mm, 40 * mm])]  # fmt: skip
+
         if d.keyframes:
             cell = width / len(d.keyframes)
             images, labels = [], []

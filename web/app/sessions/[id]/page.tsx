@@ -11,12 +11,16 @@ import { PitchMap } from "@/components/PitchMap";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card } from "@/components/ui/Card";
 import { Empty, ErrorBox, Loading } from "@/components/ui/States";
-import { api, type SessionEvent } from "@/lib/api";
+import { api, fileUrl, type SessionEvent } from "@/lib/api";
 import type { SessionOut, SessionResult } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSessionStatus } from "@/lib/useSessionStatus";
 import { CountUp } from "@/components/motion/CountUp";
 import { PageHead } from "@/components/ui/PageHead";
+import { ReadinessSpell } from "@/components/ReadinessSpell";
+import { ReleaseConsistency } from "@/components/ReleaseConsistency";
+import { RiskGauge } from "@/components/RiskGauge";
+import type { Arm } from "@/lib/pose";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { bandOf, bandStyle, cleanName, cn, fmt } from "@/lib/utils";
 
@@ -86,6 +90,16 @@ function SessionView({ out, reload }: { out: SessionOut; reload: () => void }) {
               >
                 {picking ? "Close bowler picker" : "Wrong bowler?"}
               </button>
+            )}
+            {status === "done" && (
+              <a
+                href={api.reelUrl(id)}
+                download
+                className="border border-foreground px-4 py-2 hover:bg-foreground hover:text-background"
+                title="Best and worst deliveries in slow motion (takes a few seconds the first time)"
+              >
+                Highlight reel
+              </a>
             )}
             {status === "done" && (
               <a
@@ -166,6 +180,9 @@ function Results({
   reload: () => void;
 }) {
   const [calibrating, setCalibrating] = useState(false);
+  const bowlers = useAsync(() => api.bowlers(), []);
+  const bowler = bowlers.data?.find((b) => b.id === out.session.bowler_id) ?? null;
+  const heightCm = bowler?.height_cm ?? null;
   const ds = result.deliveries;
   const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
   const technique = avg(ds.map((d) => d.technique_score));
@@ -176,6 +193,16 @@ function Results({
   const limit = ds[0]?.legality.threshold_deg ?? 15;
   const reason = ds.find((d) => !d.legality.screened)?.legality.not_screened_reason;
   const band = bandStyle[bandOf(injury)];
+  const faultCounts = new Map<string, number>();
+  ds.forEach((d) =>
+    d.faults.forEach((f) => faultCounts.set(f.name, (faultCounts.get(f.name) ?? 0) + 1)),
+  );
+  const topFaults = [...faultCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const calibrated = ds.map((d) => d.speed_kmh).filter((v): v is number => v !== null);
+  const rough = ds.map((d) => d.speed_estimate_kmh).filter((v): v is number => v != null);
+  const speeds = calibrated.length ? calibrated : rough;
+  const types = ds.map((d) => d.delivery_type?.delivery_type).filter(Boolean);
+  const fast = types.filter((t) => t === "fast").length;
 
   return (
     <>
@@ -239,6 +266,91 @@ function Results({
         </dl>
       </section>
 
+      {/* load, faults, release */}
+      <section className="grid gap-12 lg:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)]">
+        <div data-reveal>
+          <p className="kicker mb-3">Injury load</p>
+          <RiskGauge score={injury} />
+        </div>
+        <div data-reveal style={{ "--d": "120ms" } as React.CSSProperties}>
+          <p className="kicker mb-3">Recurring faults</p>
+          {topFaults.length === 0 ? (
+            <p className="text-muted">No technique faults found.</p>
+          ) : (
+            <ul className="space-y-3">
+              {topFaults.map(([name, n]) => (
+                <li key={name}>
+                  <div className="flex justify-between text-sm">
+                    <span>{name}</span>
+                    <span className="tabular text-muted">
+                      {n}/{ds.length}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-px bg-border" data-reveal>
+                    <div
+                      className="grow h-0.5 -translate-y-px bg-accent"
+                      style={{ width: `${(100 * n) / ds.length}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <dl
+          className="grid grid-cols-2 content-start gap-6"
+          data-reveal
+          style={{ "--d": "240ms" } as React.CSSProperties}
+        >
+          <div>
+            <dt className="kicker">Top speed</dt>
+            <dd className="mt-1 font-display text-4xl leading-none">
+              {speeds.length ? <CountUp value={Math.max(...speeds)} /> : "—"}
+              <span className="ml-1 text-sm text-muted">{speeds.length ? "km/h" : ""}</span>
+            </dd>
+            <p className="mt-1 text-xs text-muted">
+              {calibrated.length
+                ? "from the calibrated pitch"
+                : rough.length
+                  ? "rough estimate (no calibration): calibrate for accuracy"
+                  : "calibrate the pitch for speed"}
+            </p>
+          </div>
+          <div>
+            <dt className="kicker">Delivery type</dt>
+            <dd className="mt-1 font-display text-4xl leading-none">
+              {types.length === 0 ? "—" : fast >= types.length - fast ? "Pace" : "Spin"}
+            </dd>
+            <p className="mt-1 text-xs text-muted">
+              {types.length
+                ? `${fast} pace · ${types.length - fast} spin (model estimate)`
+                : "not classified"}
+            </p>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <SectionHead
+          title="Readiness and workload"
+          hint="How the bowler felt, overs bowled against age limits, and load warnings"
+        />
+        <ReadinessSpell out={out} balls={ds.length} />
+      </section>
+
+      <section>
+        <SectionHead
+          title="Release consistency"
+          hint="Where the ball left the hand on every delivery, relative to the hips"
+        />
+        <ReleaseConsistency
+          posePath={result.artifacts.pose}
+          deliveries={ds}
+          arm={result.bowling_arm as Arm}
+          heightCm={heightCm}
+        />
+      </section>
+
       {/* deliveries */}
       <section>
         <SectionHead n="01" title="Deliveries" hint="Open one to step through it frame by frame" />
@@ -285,6 +397,64 @@ function Results({
           })}
         </ul>
       </section>
+
+      {/* contact sheet */}
+      {ds.some((d) => d.keyframes.release) && (
+        <section>
+          <SectionHead
+            title="Contact sheet"
+            hint={`Every delivery found in the video, at its release frame${ds.length > 1 ? " (cut automatically)" : ""}`}
+          />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {ds.map((d, i) => {
+              const src = d.keyframes.release;
+              const href = out.delivery_ids[i] ? `/deliveries/${out.delivery_ids[i]}` : null;
+              const body = (
+                <>
+                  <div className="aspect-[3/4] overflow-hidden bg-plate">
+                    {src && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={fileUrl(src)}
+                        alt={`Delivery ${d.delivery_idx + 1} at release`}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="font-display text-xl">{d.delivery_idx + 1}</span>
+                    <VerdictWord
+                      verdict={d.legality.verdict}
+                      size="sm"
+                      verified={d.legality.screened}
+                    />
+                  </div>
+                  <p className="tabular text-xs text-muted">
+                    Technique {d.technique_score.toFixed(0)} · elbow{" "}
+                    {fmt(d.legality.elbow_extension_deg, 1, "°")}
+                  </p>
+                </>
+              );
+              return (
+                <div
+                  key={d.delivery_idx}
+                  data-reveal
+                  style={{ "--d": `${i * 60}ms` } as React.CSSProperties}
+                >
+                  {href ? (
+                    <Link href={href} className="group block">
+                      {body}
+                    </Link>
+                  ) : (
+                    body
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* coach */}
       <section className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">

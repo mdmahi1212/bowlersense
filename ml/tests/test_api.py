@@ -491,3 +491,102 @@ def test_bowler_progress(done: Env) -> None:
         0 <= p["technique"] <= 100 and body["best"]["delivery_id"] == p["items"][0]["delivery_id"]
     )
     assert done.client.get("/bowlers/nope/progress").status_code == 404
+
+
+def test_notes_need_text_and_one_point(done: Env) -> None:
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    ok = {"annotations": [{"kind": "note", "frame": 4, "points": [[5, 5]], "label": "Head falls"}]}
+    assert done.client.put(f"/deliveries/{did}/annotations", json=ok).status_code == 200
+    for bad in (
+        {"kind": "note", "frame": 4, "points": [[5, 5]], "label": "  "},
+        {"kind": "line", "frame": 4, "points": [[5, 5], [1, 1], [2, 2]]},
+    ):
+        r = done.client.put(f"/deliveries/{did}/annotations", json={"annotations": [bad]})
+        assert r.status_code == 422
+
+
+def test_drill_plan_and_goals(done: Env) -> None:
+    bid = done.bowler_id
+    assert done.client.get(f"/bowlers/{bid}/plan").json() is None
+    plan = done.client.post(f"/bowlers/{bid}/plan").json()
+    assert len(plan["sessions"]) == 4 * 3 and plan["faults"]
+    assert all(it["drill"] and not it["done"] for s in plan["sessions"] for it in s["items"])
+    plan["sessions"][0]["items"][0]["done"] = True
+    assert done.client.put(f"/bowlers/{bid}/plan", json=plan).status_code == 200
+    assert done.client.get(f"/bowlers/{bid}/plan").json()["sessions"][0]["items"][0]["done"]
+    goals = {"goals": [{"metric": "technique", "op": "above", "target": 75, "label": "Tidy up"}]}
+    assert done.client.put(f"/bowlers/{bid}/goals", json=goals).status_code == 200
+    assert done.client.get(f"/bowlers/{bid}/goals").json() == goals
+    bad = {"goals": [{"metric": "speed", "op": "above", "target": 1}]}
+    assert done.client.put(f"/bowlers/{bid}/goals", json=bad).status_code == 422
+    assert done.client.post("/bowlers/nope/plan").status_code == 404
+
+
+def test_spell_limit_for_juniors(env: Env) -> None:
+    young = env.client.post(
+        "/bowlers", json={"name": "Junior", "bowling_arm": "right", "dob": "2013-06-01"}
+    ).json()
+    adult = env.client.post(
+        "/bowlers", json={"name": "Senior", "bowling_arm": "right", "dob": "1990-01-01"}
+    ).json()
+    limit = env.client.get(f"/bowlers/{young['id']}/workload").json()["spell_limit"]
+    assert limit is not None and limit["overs_per_spell"] in (5, 6, 7) and limit["age"] >= 12
+    assert env.client.get(f"/bowlers/{adult['id']}/workload").json()["spell_limit"] is None
+
+
+def test_readiness_stored_with_the_session(env: Env, clip: tuple[bytes, bytes]) -> None:
+    s = env.upload(clip, sleep="4", soreness="2", effort="7")["session"]
+    assert isinstance(s, dict)
+    assert s["options"]["readiness"] == {"sleep": 4, "soreness": 2, "effort": 7}
+    r = env.client.post(
+        "/sessions",
+        files={"file": ("c.mp4", clip[0], "video/mp4")},
+        data={"soreness": "9"},
+    )
+    assert r.status_code == 422
+
+
+def test_in_app_recording_is_made_constant_rate(env: Env, clip: tuple[bytes, bytes]) -> None:
+    from bowlsense.io.video import probe_video
+
+    s = env.upload(clip, capture_fps="30")["session"]
+    assert isinstance(s, dict)
+    video = env.settings.storage.root_path / str(s["video_path"])
+    assert video.suffix == ".mp4" and video.is_file()
+    assert abs(probe_video(video).fps - 30.0) < 0.5
+    assert not list(video.parent.glob("*.rec.mp4"))  # temp file cleaned up
+
+
+def test_highlight_reel_and_poster(done: Env) -> None:
+    reel = done.client.get(f"/sessions/{_sid(done)}/reel.mp4")
+    assert reel.status_code == 200, reel.text
+    assert reel.content[4:8] == b"ftyp" and "attachment" in reel.headers["content-disposition"]
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    png = done.client.get(f"/deliveries/{did}/poster.png")
+    assert png.status_code == 200 and png.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_pdf_gets_the_live_appendix(done: Env) -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    sid = _sid(done)
+    did = done.client.get(f"/sessions/{sid}").json()["delivery_ids"][0]
+    clear = done.client.put(f"/deliveries/{did}/annotations", json={"annotations": []})
+    assert clear.status_code == 200  # other tests may have saved marks
+    before = len(PdfReader(BytesIO(done.client.get(f"/sessions/{sid}/report.pdf").content)).pages)
+    marks = {"annotations": [{"kind": "angle", "frame": 2, "points": [[0, 0], [5, 5], [10, 0]]}]}
+    assert done.client.put(f"/deliveries/{did}/annotations", json=marks).status_code == 200
+    pdf = done.client.get(f"/sessions/{sid}/report.pdf")
+    assert pdf.status_code == 200
+    reader = PdfReader(BytesIO(pdf.content))
+    assert len(reader.pages) == before + 1
+    assert "Angle 90.0 deg" in reader.pages[-1].extract_text()
+
+
+def test_delivery_has_no_ball_and_speed_fields(done: Env) -> None:
+    did = done.client.get(f"/sessions/{_sid(done)}").json()["delivery_ids"][0]
+    d = done.client.get(f"/deliveries/{did}").json()["delivery"]
+    assert "speed_estimate_kmh" in d
+    assert d["no_ball"] is None or d["no_ball"]["status"] in ("legal", "no_ball", "not_found")

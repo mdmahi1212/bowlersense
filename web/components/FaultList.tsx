@@ -18,7 +18,7 @@ export function FaultList({
   faults: Fault[];
   drills: Record<string, Drill[]> | null;
   notMeasured: Record<string, string>;
-  onJump: (frame: number) => void;
+  onJump: (frame: number, code?: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -38,7 +38,7 @@ export function FaultList({
                   {sev.label} · {f.severity.toFixed(0)}
                 </Badge>
                 {f.frames.length > 0 && (
-                  <Button variant="secondary" onClick={() => onJump(f.frames[0])}>
+                  <Button variant="secondary" onClick={() => onJump(f.frames[0], f.code)}>
                     Jump to frame {f.frames[0]}
                   </Button>
                 )}

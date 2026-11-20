@@ -3,7 +3,7 @@
 import { useState, type MouseEvent } from "react";
 import type { Annotation } from "@/lib/types";
 
-export type MeasureMode = "off" | "line" | "angle";
+export type MeasureMode = "off" | "line" | "angle" | "note";
 type Pt = [number, number];
 
 /** Angle at ``b`` between ``a`` and ``c``, in degrees (0-180). */
@@ -24,6 +24,7 @@ export function tilt(a: Pt, b: Pt): number {
 
 export function describe(a: Annotation): string {
   const p = a.points as Pt[];
+  if (a.kind === "note") return `“${a.label}”`;
   return a.kind === "angle" && p.length === 3
     ? `${angleAt(p[0], p[1], p[2]).toFixed(1)}°`
     : `${tilt(p[0], p[1]).toFixed(1)}° from horizontal`;
@@ -48,7 +49,7 @@ export function MeasureLayer({
 }) {
   const [draft, setDraft] = useState<Pt[]>([]);
   const [hover, setHover] = useState<Pt | null>(null);
-  const need = mode === "angle" ? 3 : 2;
+  const need = mode === "angle" ? 3 : mode === "note" ? 1 : 2;
   const u = Math.max(width, height) / 400; // stroke / text unit
 
   function toVideo(e: MouseEvent<SVGSVGElement>): Pt | null {
@@ -64,6 +65,11 @@ export function MeasureLayer({
     const p = toVideo(e);
     if (!p) return;
     const pts = [...draft, p];
+    if (mode === "note") {
+      const text = window.prompt("Coach note for this frame:")?.trim();
+      if (text) onAdd({ kind: "note", frame, points: [p], label: text.slice(0, 500) });
+      return;
+    }
     if (pts.length >= need) {
       onAdd({ kind: mode, frame, points: pts as Annotation["points"], label: "" });
       setDraft([]);
@@ -91,9 +97,13 @@ export function MeasureLayer({
       }}
       aria-hidden={mode === "off"}
     >
-      {shown.map((a, i) => (
-        <Shape key={i} pts={a.points as Pt[]} kind={a.kind} u={u} />
-      ))}
+      {shown.map((a, i) =>
+        a.kind === "note" ? (
+          <Note key={i} at={a.points[0] as Pt} text={a.label} u={u} />
+        ) : (
+          <Shape key={i} pts={a.points as Pt[]} kind={a.kind} u={u} />
+        ),
+      )}
       {live.length > 0 && (
         <Shape pts={live} kind={live.length === 3 ? "angle" : "line"} u={u} draft />
       )}
@@ -179,6 +189,47 @@ function Shape({
       ))}
       {arc}
       {label}
+    </g>
+  );
+}
+
+/** A coach's note pinned to a point on the frame. */
+function Note({ at, text, u }: { at: Pt; text: string; u: number }) {
+  const lines = text.match(/.{1,34}(\s|$)/g)?.map((l) => l.trim()) ?? [text];
+  const w = Math.min(34, Math.max(...lines.map((l) => l.length))) * 6.2 * u + 16 * u;
+  const h = lines.length * 13 * u + 12 * u;
+  return (
+    <g>
+      <circle cx={at[0]} cy={at[1]} r={5 * u} fill="#ffd84d" stroke="#000" strokeWidth={u} />
+      <line
+        x1={at[0]}
+        y1={at[1]}
+        x2={at[0] + 18 * u}
+        y2={at[1] - 18 * u}
+        stroke="#ffd84d"
+        strokeWidth={1.5 * u}
+      />
+      <rect
+        x={at[0] + 18 * u}
+        y={at[1] - 18 * u - h}
+        width={w}
+        height={h}
+        fill="#16140f"
+        fillOpacity={0.88}
+        stroke="#ffd84d"
+        strokeWidth={u}
+      />
+      {lines.map((l, i) => (
+        <text
+          key={i}
+          x={at[0] + 26 * u}
+          y={at[1] - 18 * u - h + 16 * u + i * 13 * u}
+          fontSize={11 * u}
+          fill="#f2eee5"
+        >
+          {l}
+        </text>
+      ))}
     </g>
   );
 }

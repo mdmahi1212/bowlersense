@@ -20,9 +20,16 @@ function apiUrl(): string {
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await connection(); // render per request so the API address is read at run time
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <head>
         <meta name="bowlsense-api" content={apiUrl()} />
+        <script
+          // apply the saved theme before the first paint (no flash of the wrong theme)
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('bowlsense-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}",
+          }}
+        />
       </head>
       <body className="min-h-full">
         <a href="#main" className="sr-only focus:not-sr-only focus:p-2">

@@ -169,3 +169,23 @@ def probe_codec(path: Path) -> str:
         if "Video:" in line:
             return line.split("Video:", 1)[1].strip().split()[0].rstrip(",")
     raise RenderError(f"No video stream found in {path.name}.")
+
+
+def transcode_cfr(src: Path, dst: Path, fps: float, preset: str, crf: int) -> Path:
+    """Re-encode a (variable-frame-rate) browser recording as a constant-frame-rate H.264
+    MP4 at ``fps``, so frame indices map to time exactly."""
+    if fps <= 0:
+        raise RenderError(f"Bad recording frame rate: {fps}.")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(src),
+        "-an", "-fps_mode", "cfr", "-r", f"{fps:.3f}",
+        "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", str(dst),
+    ]  # fmt: skip
+    done = subprocess.run(cmd, capture_output=True, check=False)
+    if done.returncode != 0 or not dst.is_file():
+        dst.unlink(missing_ok=True)
+        tail = done.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or ["no output"]
+        raise RenderError(f"Couldn't convert the recording: {tail[0]}")
+    return dst

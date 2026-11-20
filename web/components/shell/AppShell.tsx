@@ -10,6 +10,7 @@ const NAV: [string, string][] = [
   ["/", "Analyse"],
   ["/sessions", "Sessions"],
   ["/bowlers", "Bowlers"],
+  ["/team", "Team"],
   ["/compare", "Compare actions"],
   ["/evaluation", "Model evaluation"],
   ["/settings", "Settings"],
@@ -67,7 +68,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             ))}
           </nav>
-          <p className="ml-auto flex items-center gap-2 pb-1 text-xs text-muted" aria-live="polite">
+          <ThemeToggle />
+          <p className="flex items-center gap-2 pb-1 text-xs text-muted" aria-live="polite">
             <span
               className={cn(
                 "inline-block h-1.5 w-1.5 rounded-full",
@@ -110,4 +112,32 @@ function useReveal(path: string) {
       mo.disconnect();
     };
   }, [path]);
+}
+
+/** Light "paper" or dark "night nets" theme, remembered on this computer. */
+function ThemeToggle() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.dataset.theme === "dark"); // eslint-disable-line react-hooks/set-state-in-effect
+  }, []);
+  function flip() {
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem("bowlsense-theme", next);
+    } catch {
+      /* private window: the choice just isn't remembered */
+    }
+    setDark(!dark);
+  }
+  return (
+    <button
+      type="button"
+      onClick={flip}
+      aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+      className="uline ml-auto pb-1 text-xs text-muted hover:text-foreground"
+    >
+      {dark ? "Light" : "Dark"} mode
+    </button>
+  );
 }

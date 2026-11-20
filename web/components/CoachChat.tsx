@@ -7,7 +7,16 @@ import { useAsync } from "@/lib/useAsync";
 import { Button } from "./ui/Button";
 
 /** Chat with the local coach about this session (falls back to rule-based answers offline). */
-export function CoachChat({ sessionId }: { sessionId: string }) {
+export function CoachChat({
+  sessionId,
+  context,
+  placeholder,
+}: {
+  sessionId: string;
+  /** Sent ahead of each question (not shown), e.g. the numbers of the paused frame. */
+  context?: string;
+  placeholder?: string;
+}) {
   const history = useAsync(() => api.coachHistory(sessionId), [sessionId]);
   const [extra, setExtra] = useState<ChatTurn[]>([]);
   const [message, setMessage] = useState("");
@@ -25,7 +34,14 @@ export function CoachChat({ sessionId }: { sessionId: string }) {
     setExtra((t) => [...t, { role: "user", content: text }]);
     setMessage("");
     try {
-      const reply = await api.coach(sessionId, text);
+      const reply = await api.coach(
+        sessionId,
+        context
+          ? `${context}
+
+Question: ${text}`
+          : text,
+      );
       setExtra((t) => [...t, { role: "assistant", content: reply.reply }]);
       setNote(
         reply.source === "template"
@@ -75,7 +91,7 @@ export function CoachChat({ sessionId }: { sessionId: string }) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           maxLength={2000}
-          placeholder="Ask the coach…"
+          placeholder={placeholder ?? "Ask the coach…"}
           className="flex-1 border border-border bg-surface-2 px-3 py-2 text-sm"
         />
         <Button type="submit" disabled={busy || !message.trim()}>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BowlerPicker } from "@/components/BowlerPicker";
 import { ImageAnalysisPanel } from "@/components/ImageAnalysisPanel";
+import { WebcamRecorder } from "@/components/WebcamRecorder";
 import { UploadDropzone, isImage } from "@/components/UploadDropzone";
 import { Button } from "@/components/ui/Button";
 import { CameraSetup } from "@/components/art/Figures";
@@ -26,26 +27,58 @@ export default function UploadPage() {
   const [allowLowFps, setAllowLowFps] = useState(false);
   const [slowMotion, setSlowMotion] = useState("auto");
   const [cameraView, setCameraView] = useState("auto");
+  const [ready, setReady] = useState<{ sleep: number; soreness: number; effort: number } | null>(
+    null,
+  );
   const [progress, setProgress] = useState<number | null>(null);
+  const [batch, setBatch] = useState<File[]>([]);
+  const [batchState, setBatchState] = useState<string[]>([]);
+  const [captureFps, setCaptureFps] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
+  function options(f: File, onProgress: (x: number) => void) {
+    return uploadSession(
+      {
+        file: f,
+        poseFile: batch.length > 1 ? null : poseFile,
+        bowlerId: bowlerId || undefined,
+        allowLowFps: allowLowFps || captureFps !== undefined,
+        slowMotion: slowMotion === "auto" ? undefined : Number(slowMotion),
+        cameraView: cameraView === "auto" ? undefined : (cameraView as "side" | "front" | "behind"),
+        readiness: ready,
+        captureFps: f === file ? captureFps : undefined,
+      },
+      onProgress,
+    );
+  }
+
+  async function submitBatch() {
+    setError(null);
+    const states = batch.map(() => "waiting");
+    setBatchState([...states]);
+    setProgress(0);
+    for (let i = 0; i < batch.length; i += 1) {
+      states[i] = "uploading";
+      setBatchState([...states]);
+      try {
+        await options(batch[i], (x) => setProgress((i + x) / batch.length)).promise;
+        states[i] = "queued for analysis";
+      } catch (err) {
+        states[i] = `failed: ${errorText(err)}`;
+      }
+      setBatchState([...states]);
+    }
+    setProgress(null);
+    if (states.every((x) => x.startsWith("queued"))) router.push("/sessions");
+  }
+
   async function submit() {
+    if (batch.length > 1) return submitBatch();
     if (!file) return;
     setError(null);
     setProgress(0);
     try {
-      const { promise } = uploadSession(
-        {
-          file,
-          poseFile,
-          bowlerId: bowlerId || undefined,
-          allowLowFps,
-          slowMotion: slowMotion === "auto" ? undefined : Number(slowMotion),
-          cameraView:
-            cameraView === "auto" ? undefined : (cameraView as "side" | "front" | "behind"),
-        },
-        setProgress,
-      );
+      const { promise } = options(file, setProgress);
       const out = await promise;
       router.push(`/sessions/${out.session.id}`);
     } catch (err) {
@@ -72,9 +105,45 @@ export default function UploadPage() {
           disabled={uploading}
           onFile={(f, err) => {
             setFile(f);
+            setBatch([]);
+            setCaptureFps(undefined);
             setError(err ?? null);
           }}
+          onFiles={(fs) => {
+            setBatch(fs);
+            setBatchState([]);
+            setFile(fs[0] ?? null);
+            setCaptureFps(undefined);
+            setError(null);
+          }}
         />
+        {batch.length > 1 && (
+          <ol className="mt-4 divide-y divide-border border-y border-border text-sm">
+            {batch.map((f, i) => (
+              <li key={f.name + i} className="flex justify-between gap-4 py-2">
+                <span className="truncate">
+                  <span className="tabular mr-3 text-xs text-accent">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  {f.name}
+                </span>
+                <span className="shrink-0 text-muted">
+                  {batchState[i] ?? `${(f.size / 1048576).toFixed(1)} MB`}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+        <div className="mt-4">
+          <WebcamRecorder
+            onDone={(f, fps) => {
+              setFile(f);
+              setBatch([]);
+              setCaptureFps(fps);
+              setError(null);
+            }}
+          />
+        </div>
         {photo && file && (
           <div className="mt-8">
             <ImageAnalysisPanel key={file.name + file.size} file={file} />
@@ -142,10 +211,63 @@ export default function UploadPage() {
               />
             </details>
           </Step>
+          <Step n="03" title="How does the bowler feel today?">
+            {ready === null ? (
+              <button
+                type="button"
+                onClick={() => setReady({ sleep: 3, soreness: 2, effort: 6 })}
+                className="text-sm text-accent hover:underline"
+              >
+                Add a readiness check (optional, 10 seconds) →
+              </button>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-3">
+                {(
+                  [
+                    ["sleep", "Sleep last night", 5, ["Awful", "Great"]],
+                    ["soreness", "Muscle soreness", 5, ["None", "Very sore"]],
+                    ["effort", "Planned effort", 10, ["Easy", "Flat out"]],
+                  ] as const
+                ).map(([k, label, max, [lo, hi]]) => (
+                  <label key={k} className="block text-sm">
+                    <span className="kicker">{label}</span>
+                    <span className="mt-1 block font-display text-3xl">
+                      {ready[k]}
+                      <span className="text-sm text-muted">/{max}</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={max}
+                      value={ready[k]}
+                      onChange={(e) => setReady({ ...ready, [k]: Number(e.target.value) })}
+                      className="mt-2 w-full"
+                      aria-label={label}
+                    />
+                    <span className="flex justify-between text-xs text-muted">
+                      <span>{lo}</span>
+                      <span>{hi}</span>
+                    </span>
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setReady(null)}
+                  className="justify-self-start text-xs text-muted hover:text-foreground sm:col-span-3"
+                >
+                  Skip the readiness check
+                </button>
+              </div>
+            )}
+          </Step>
           {error && <ErrorBox error={error} />}
           <div className="flex flex-wrap items-center gap-6 border-t border-foreground pt-6">
             <Button onClick={submit} disabled={!file || uploading} className="px-6 py-3 text-base">
-              {uploading ? "Uploading…" : "Upload and analyse"}
+              {uploading
+                ? "Uploading…"
+                : batch.length > 1
+                  ? `Upload and analyse all ${batch.length}`
+                  : "Upload and analyse"}
             </Button>
             {uploading ? (
               <div className="min-w-48 flex-1" aria-live="polite">

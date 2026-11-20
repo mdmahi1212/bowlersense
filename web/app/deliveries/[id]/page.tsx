@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useMemo, useState } from "react";
 import { AngleChart } from "@/components/AngleChart";
+import { CoachChat } from "@/components/CoachChat";
 import { BodyRiskMap } from "@/components/BodyRiskMap";
 import { FaultList } from "@/components/FaultList";
 import { VerdictWord } from "@/components/LegalityVerdict";
@@ -15,13 +16,17 @@ import {
   PhaseFilmstrip,
 } from "@/components/StudioPanels";
 import { AngleDial } from "@/components/studio/AngleDial";
+import { BiomechLayer, type LayerFlags } from "@/components/studio/BiomechLayer";
+import { FaultFocus, faultJoints } from "@/components/studio/FaultFocus";
 import { MeasureLayer, type MeasureMode, describe } from "@/components/studio/MeasureLayer";
+import { RhythmPanel } from "@/components/studio/RhythmPanel";
+import { bodyHeightPx, headStability, hipMid, wristPath } from "@/lib/biomech";
 import { ReleaseLoop } from "@/components/studio/ReleaseLoop";
 import { type Lane, TrackDock } from "@/components/studio/TrackDock";
 import { ErrorBox, Loading } from "@/components/ui/States";
 import { api, errorText, fileUrl } from "@/lib/api";
 import { type Arm, frameAngles, frameIndex } from "@/lib/pose";
-import type { Annotation, DeliveryOut, PoseSequence } from "@/lib/types";
+import type { Annotation, DeliveryOut, PoseSequence, ReferenceAction } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { PageHead } from "@/components/ui/PageHead";
 import { cleanName, cn, fmt } from "@/lib/utils";
@@ -33,7 +38,8 @@ type Tab =
   | "Faults"
   | "Injury load"
   | "Sequence"
-  | "Measurements";
+  | "Measurements"
+  | "Ask the coach";
 const JOINTS = [
   ["bowling_elbow", "Elbow"],
   ["front_knee", "Front knee"],
@@ -49,21 +55,31 @@ export default function DeliveryPage({ params }: { params: Promise<{ id: string 
   if (delivery.error) return <ErrorBox error={delivery.error} />;
   if (!delivery.data || !refs.data) return <Loading label="Opening the workspace…" />;
   return (
-    <Workspace key={id} out={delivery.data} edges={refs.data.edges} reload={delivery.reload} />
+    <Workspace
+      key={id}
+      out={delivery.data}
+      edges={refs.data.edges}
+      reference={refs.data.references[0] ?? null}
+      reload={delivery.reload}
+    />
   );
 }
 
 function Workspace({
   out,
   edges,
+  reference,
   reload,
 }: {
   out: DeliveryOut;
   edges: string[][];
+  reference: ReferenceAction | null;
   reload: () => void;
 }) {
   const d = out.delivery;
   const arm = out.bowling_arm as Arm;
+  const [layers, setLayers] = useState<LayerFlags>({ speed: false, com: false, arm: false });
+  const [focus, setFocus] = useState<string[]>([]);
   const pose = useAsync(
     () =>
       fetch(fileUrl(out.pose)).then((r) =>
@@ -81,6 +97,47 @@ function Workspace({
   const [tab, setTab] = useState<Tab>("Legality");
   const [joint, setJoint] = useState<(typeof JOINTS)[number][0]>("bowling_elbow");
   const [busy, setBusy] = useState(false);
+  const heightPx = useMemo(() => (frames ? bodyHeightPx(frames) : null), [frames]);
+  const ref = useMemo(
+    () =>
+      reference
+        ? { name: reference.name, frames: frameIndex(reference.sequence), phases: reference.phases }
+        : null,
+    [reference],
+  );
+  const refPath = useMemo(() => {
+    if (!ref || !frames || !heightPx) return null;
+    const relU = d.clip_start + d.phases.release;
+    const hu = hipMid(frames.get(relU));
+    const hr = hipMid(ref.frames.get(ref.phases.release));
+    const hRef = bodyHeightPx(ref.frames);
+    const bu = hipMid(frames.get(d.clip_start + d.phases.bfc));
+    const br = hipMid(ref.frames.get(ref.phases.bfc));
+    if (!hu || !hr || !hRef || !bu || !br) return null;
+    const flip = Math.sign(hu.x - bu.x) * Math.sign(hr.x - br.x) < 0 ? -1 : 1;
+    const k = heightPx / hRef;
+    const refArm = (reference?.sequence.bowling_arm ?? arm) as Arm;
+    return wristPath(ref.frames, refArm, ref.phases.bfc, ref.phases.follow_through_end).map(
+      (p) => ({
+        x: hu.x + flip * (p.x - hr.x) * k,
+        y: hu.y + (p.y - hr.y) * k,
+      }),
+    );
+  }, [ref, frames, heightPx, d, arm, reference]);
+  const live = frameAngles(frames?.get(d.clip_start + frame), arm);
+  const frameContext =
+    `[Delivery ${d.delivery_idx + 1}, frame ${frame} (${phaseAt(frame, d.phases)}), ` +
+    `${(((frame - d.phases.release) / out.analysis_fps) * 1000).toFixed(0)} ms from release. ` +
+    `Angles at this frame: elbow ${fmt(live.elbow, 0)} deg, front knee ${fmt(live.frontKnee, 0)} deg, ` +
+    `trunk lean ${fmt(live.trunkLean, 0)} deg, upper arm ${fmt(live.upperArm, 0)} deg. ` +
+    `Faults on this delivery: ${d.faults.map((f) => f.name).join(", ") || "none"}.]`;
+  const head = useMemo(
+    () =>
+      frames && heightPx
+        ? headStability(frames, d.clip_start + d.phases.release, out.analysis_fps, heightPx)
+        : null,
+    [frames, heightPx, d, out.analysis_fps],
+  );
   const [mode, setMode] = useState<MeasureMode>("off");
   const saved = useAsync(() => api.annotations(out.delivery_id), [out.delivery_id]);
   const [marks, setMarks] = useState<Annotation[] | null>(null);
@@ -149,6 +206,7 @@ function Workspace({
     "Injury load",
     "Sequence",
     "Measurements",
+    "Ask the coach",
   ];
 
   return (
@@ -199,9 +257,45 @@ function Workspace({
               <p className="kicker">Plate 1</p>
               <h2 className="mt-1 font-display text-2xl">The delivery, frame by frame</h2>
             </div>
+            <div
+              className="flex flex-wrap items-center gap-1 text-sm"
+              role="group"
+              aria-label="Analysis layers"
+            >
+              <span className="kicker mr-2">Show</span>
+              {(
+                [
+                  ["speed", "Joint speed"],
+                  ["com", "Centre of mass"],
+                  ["arm", "Arm path"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={layers[k]}
+                  onClick={() => setLayers((l) => ({ ...l, [k]: !l[k] }))}
+                  className={cn(
+                    "px-2.5 py-1 transition-colors",
+                    layers[k] ? "bg-accent text-white" : "text-muted hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              {focus.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFocus([])}
+                  className="ml-1 px-2 py-1 text-xs text-accent"
+                >
+                  Clear highlight ×
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-1 text-sm" role="group" aria-label="Measure">
               <span className="kicker mr-2">Measure</span>
-              {(["off", "line", "angle"] as const).map((m) => (
+              {(["off", "line", "angle", "note"] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -219,8 +313,12 @@ function Workspace({
               ))}
               {mode !== "off" && (
                 <span className="ml-2 hidden text-xs text-muted lg:inline">
-                  {mode === "angle" ? "Click 3 points, vertex second" : "Click 2 points"} ·
-                  right-click cancels
+                  {mode === "angle"
+                    ? "Click 3 points, vertex second"
+                    : mode === "note"
+                      ? "Click where the note belongs"
+                      : "Click 2 points"}{" "}
+                  · right-click cancels
                 </span>
               )}
             </div>
@@ -244,17 +342,33 @@ function Workspace({
             height={out.height}
             hideTimeline
             overlay={
-              <MeasureLayer
-                width={out.width}
-                height={out.height}
-                frame={frame}
-                annotations={notes}
-                mode={mode}
-                onAdd={(a) => {
-                  saveMarks([...notes, a]);
-                  setTab("Measurements");
-                }}
-              />
+              <>
+                <BiomechLayer
+                  width={out.width}
+                  height={out.height}
+                  frames={frames}
+                  frame={d.clip_start + frame}
+                  arm={arm}
+                  fps={out.analysis_fps}
+                  heightPx={heightPx}
+                  window={[d.clip_start + d.phases.bfc, d.clip_start + d.phases.follow_through_end]}
+                  release={d.clip_start + d.phases.release}
+                  show={layers}
+                  focus={focus}
+                  refPath={layers.arm ? refPath : null}
+                />
+                <MeasureLayer
+                  width={out.width}
+                  height={out.height}
+                  frame={frame}
+                  annotations={notes}
+                  mode={mode}
+                  onAdd={(a) => {
+                    saveMarks([...notes, a]);
+                    setTab("Measurements");
+                  }}
+                />
+              </>
             }
           />
           <TrackDock
@@ -296,9 +410,17 @@ function Workspace({
             <a
               href={api.clipUrl(out.delivery_id, "gif")}
               download
-              className="flex-1 border border-foreground px-3 py-2 text-center transition-colors hover:bg-foreground hover:text-background"
+              className="border border-foreground px-3 py-2 text-center transition-colors hover:bg-foreground hover:text-background"
             >
               GIF
+            </a>
+            <a
+              href={api.posterUrl(out.delivery_id)}
+              download
+              className="border border-foreground px-3 py-2 text-center transition-colors hover:bg-foreground hover:text-background"
+              title="Shareable image of the release frame with the verdict and key numbers"
+            >
+              Poster
             </a>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-3">
@@ -316,6 +438,20 @@ function Workspace({
             <Kv k="Release height" v={fmt(d.release_height_pct, 0, "% of height")} />
             <Kv k="Arm speed" v={fmt(bm.get("arm_angular_velocity"), 0, "°/s")} />
             <Kv k="Technique" v={`${d.technique_score.toFixed(0)} / 100`} />
+            <Kv
+              k="Ball speed"
+              v={
+                d.speed_kmh != null
+                  ? `${d.speed_kmh.toFixed(0)} km/h`
+                  : d.speed_estimate_kmh != null
+                    ? `≈ ${d.speed_estimate_kmh.toFixed(0)} km/h (rough)`
+                    : "—"
+              }
+            />
+            <Kv
+              k="Head stability"
+              v={head ? `${head.score.toFixed(0)} / 100 · moves ${head.movePct.toFixed(1)}%` : "—"}
+            />
           </dl>
           <p className="text-xs leading-relaxed text-muted">
             Wrong release frame? Step to it in the viewer and press{" "}
@@ -361,10 +497,36 @@ function Workspace({
                 )}
                 <dl className="divide-y divide-border border-y border-border text-sm">
                   <Kv k="Measured straightening" v={fmt(d.legality.elbow_extension_deg, 1, "°")} />
+                  <Kv
+                    k="Front-foot no-ball"
+                    v={
+                      d.legality.front_foot_no_ball != null
+                        ? d.legality.front_foot_no_ball
+                          ? "No-ball (calibrated crease)"
+                          : "Behind the line (calibrated)"
+                        : d.no_ball?.status === "no_ball"
+                          ? `No-ball? heel ${d.no_ball.margin_cm?.toFixed(0)} cm over`
+                          : d.no_ball?.status === "legal"
+                            ? `Behind the line (${Math.abs(d.no_ball.margin_cm ?? 0).toFixed(0)} cm)`
+                            : "crease not found"
+                    }
+                  />
                   <Kv k="Limit" v={`${d.legality.threshold_deg.toFixed(0)}°`} />
                   <Kv k="Confidence" v={d.legality.confidence} />
                 </dl>
-                <p className="text-xs text-muted">{d.legality.note.split(" Unverified:")[0]}</p>
+                {d.no_ball && d.no_ball.status !== "not_found" && (
+                  <button
+                    type="button"
+                    onClick={() => jump(d.phases.ffc)}
+                    className="text-sm text-accent hover:underline"
+                  >
+                    Check the front-foot-contact frame →
+                  </button>
+                )}
+                <p className="text-xs text-muted">
+                  {d.legality.note.split(" Unverified:")[0]}
+                  {d.no_ball ? ` No-ball: ${d.no_ball.note}` : ""}
+                </p>
               </div>
               {curve("bowling_elbow") && (
                 <AngleChart
@@ -432,19 +594,48 @@ function Workspace({
             </div>
           )}
           {tab === "Mechanics" && (
-            <div className="space-y-8">
+            <div className="space-y-12">
+              {frames && heightPx && (
+                <RhythmPanel
+                  frames={frames}
+                  clipStart={d.clip_start}
+                  phases={d.phases}
+                  fps={out.analysis_fps}
+                  heightPx={heightPx}
+                  onSeek={jump}
+                />
+              )}
               <KineticChain metrics={d.biomechanics} />
               <MechanicsPanel metrics={d.biomechanics} />
             </div>
           )}
           {tab === "Faults" && (
-            <div className="max-w-3xl">
-              <FaultList
+            <div className="space-y-10">
+              <FaultFocus
                 faults={d.faults}
-                drills={drills.data}
-                notMeasured={d.not_measured}
-                onJump={jump}
+                frames={frames}
+                clipStart={d.clip_start}
+                phases={d.phases}
+                arm={arm}
+                edges={edges}
+                reference={ref}
+                onShow={(f, code) => {
+                  jump(f);
+                  setFocus(faultJoints(code, arm));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
               />
+              <div className="max-w-3xl">
+                <FaultList
+                  faults={d.faults}
+                  drills={drills.data}
+                  notMeasured={d.not_measured}
+                  onJump={(f, code) => {
+                    jump(f);
+                    if (code) setFocus(faultJoints(code, arm));
+                  }}
+                />
+              </div>
             </div>
           )}
           {tab === "Injury load" && (
@@ -491,6 +682,32 @@ function Workspace({
                   ))}
                 </ol>
               )}
+            </div>
+          )}
+          {tab === "Ask the coach" && (
+            <div className="grid gap-10 lg:grid-cols-[300px_minmax(0,1fr)]">
+              <div>
+                <p className="kicker">The coach sees this frame</p>
+                <p className="mt-2 font-display text-2xl">
+                  Frame {frame} · {phaseAt(frame, d.phases)}
+                </p>
+                <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
+                  <Kv k="Elbow" v={fmt(live.elbow, 0, "°")} />
+                  <Kv k="Front knee" v={fmt(live.frontKnee, 0, "°")} />
+                  <Kv k="Trunk lean" v={fmt(live.trunkLean, 0, "°")} />
+                  <Kv k="Upper arm" v={fmt(live.upperArm, 0, "°")} />
+                </dl>
+                <p className="mt-3 text-xs text-muted">
+                  Pause on any frame and ask, e.g. &ldquo;What is wrong with my front leg
+                  here?&rdquo; Only these numbers are sent to your local coach model, never the
+                  video.
+                </p>
+              </div>
+              <CoachChat
+                sessionId={out.session_id}
+                context={frameContext}
+                placeholder="Ask about this frame…"
+              />
             </div>
           )}
           {tab === "Sequence" && (

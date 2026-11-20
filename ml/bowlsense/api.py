@@ -20,7 +20,7 @@ import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from bowlsense import __version__
 from bowlsense.analysis.compare import ReferenceAction, load_references
@@ -49,7 +49,9 @@ from bowlsense.local_settings import (
     save_local_settings,
 )
 from bowlsense.pipeline import reanalyse_delivery
-from bowlsense.render.clip import write_release_clip
+from bowlsense.render.appendix import build_appendix, merge_pdfs
+from bowlsense.render.clip import write_highlight_reel, write_poster, write_release_clip
+from bowlsense.render.ffmpeg import transcode_cfr
 from bowlsense.schemas import (
     SKELETON_EDGES,
     DeliveryMetrics,
@@ -62,7 +64,7 @@ from bowlsense.storage import OUTPUTS_DIR, LocalStorage, PathTraversalError, Upl
 from bowlsense.worker import pose_upload_path
 
 log = logging.getLogger(__name__)
-VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi")
+VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".webm")  # .webm: browser recordings
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 
@@ -148,10 +150,19 @@ class Annotation(BaseModel):
     """A measurement drawn on a frame: a line (2 points) or an angle (3 points, vertex in the
     middle). Points are in video pixels; ``frame`` is clip-relative."""
 
-    kind: Literal["line", "angle"]
+    kind: Literal["line", "angle", "note"]
     frame: int = Field(ge=0)
-    points: list[tuple[float, float]] = Field(min_length=2, max_length=3)
-    label: str = Field(default="", max_length=60)
+    points: list[tuple[float, float]] = Field(min_length=1, max_length=3)
+    label: str = Field(default="", max_length=500)
+
+    @model_validator(mode="after")
+    def _points_match_kind(self) -> Annotation:
+        need = {"line": 2, "angle": 3, "note": 1}[self.kind]
+        if len(self.points) != need:
+            raise ValueError(f"a {self.kind} needs exactly {need} point(s)")
+        if self.kind == "note" and not self.label.strip():
+            raise ValueError("a note needs some text")
+        return self
 
 
 class AnnotationsIn(BaseModel):
@@ -220,14 +231,68 @@ class WorkloadPoint(BaseModel):
     flagged: bool
 
 
+class SpellLimit(BaseModel):
+    """The junior fast-bowling limits that apply to a bowler's age."""
+
+    age: int
+    max_age: int
+    overs_per_spell: int
+    overs_per_day: int
+
+
 class WorkloadOut(BaseModel):
-    """A bowler's workload history."""
+    """A bowler's workload history (and spell limits when their age is known)."""
 
     bowler_id: str
     points: list[WorkloadPoint]
     safe_band: tuple[float, float] = (0.8, 1.3)
     flag_above: float
     latest: WorkloadResult | None
+    spell_limit: SpellLimit | None = None
+
+
+class PlanItem(BaseModel):
+    """One drill in the plan."""
+
+    fault: str
+    drill: str
+    description: str
+    reps: str
+    done: bool = False
+
+
+class PlanSession(BaseModel):
+    """One practice session of the plan."""
+
+    week: int = Field(ge=1)
+    session: int = Field(ge=1)
+    items: list[PlanItem]
+
+
+class DrillPlan(BaseModel):
+    """A multi-week drill plan built from a bowler's recurring faults."""
+
+    created: datetime
+    faults: list[str]
+    sessions: list[PlanSession]
+
+
+class Goal(BaseModel):
+    """A target on one progress measure, e.g. technique above 75."""
+
+    metric: Literal[
+        "technique", "injury", "elbow_extension_max", "release_height_pct", "stride_pct",
+        "arm_speed_deg_s",
+    ]  # fmt: skip
+    op: Literal["above", "below"]
+    target: float
+    label: str = Field(default="", max_length=80)
+
+
+class GoalsIn(BaseModel):
+    """A bowler's goals (``PUT`` replaces them all)."""
+
+    goals: list[Goal] = Field(max_length=20)
 
 
 # --- app ----------------------------------------------------------------------------------------
@@ -404,7 +469,96 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             points=points,
             flag_above=settings.workload.acwr_flag,
             latest=latest,
+            spell_limit=spell_limit(state.repo.get_bowler(bowler_id).dob),
         )
+
+    def spell_limit(dob: str | date | None) -> SpellLimit | None:
+        """The configured junior spell limits for a bowler born on ``dob`` (None for adults
+        or an unknown age)."""
+        if not dob:
+            return None
+        born = dob if isinstance(dob, date) else date.fromisoformat(str(dob)[:10])
+        today = datetime.now(UTC).date()
+        age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        for g in sorted(settings.workload.spell_guidelines, key=lambda g: g.max_age):
+            if age <= g.max_age:
+                return SpellLimit(age=age, max_age=g.max_age, overs_per_spell=g.overs_per_spell,
+                                  overs_per_day=g.overs_per_day)  # fmt: skip
+        return None
+
+    def bowler_file(bowler_id: str, name: str) -> Path:
+        state.repo.get_bowler(bowler_id)  # 404 for an unknown bowler
+        return state.storage.resolve(
+            f"{OUTPUTS_DIR}/bowlers/{bowler_id}/{name}", within=OUTPUTS_DIR
+        )
+
+    @app.get("/bowlers/{bowler_id}/plan")
+    def get_plan(bowler_id: str) -> DrillPlan | None:
+        """The bowler's current drill plan, or null if none was made yet."""
+        path = bowler_file(bowler_id, "plan.json")
+        return DrillPlan.model_validate_json(path.read_text("utf-8")) if path.is_file() else None
+
+    @app.post("/bowlers/{bowler_id}/plan")
+    def make_plan(bowler_id: str) -> DrillPlan:
+        """Build a new plan from the faults seen most in the bowler's recent sessions: each
+        practice session works on the top faults, rotating through their drills."""
+        counts: dict[str, int] = {}
+        names: dict[str, str] = {}
+        recs = [r for r in state.repo.list_sessions(bowler_id) if r.status == "done"]
+        for rec in recs[: settings.workload.plan_recent_sessions]:
+            result = state.result(rec.id)
+            for d in result.deliveries if result else []:
+                for f in d.faults:
+                    counts[f.code] = counts.get(f.code, 0) + 1
+                    names[f.code] = f.name
+        top = [c for c, _ in sorted(counts.items(), key=lambda kv: -kv[1]) if c in DRILLS][:3]
+        if not top:
+            top = [c for c in ("KNEE_COLLAPSE", "WEAK_FRONT_ARM", "HEAD_FALL") if c in DRILLS]
+        sessions: list[PlanSession] = []
+        n = 0
+        for week in range(1, settings.workload.plan_weeks + 1):
+            for k in range(1, settings.workload.plan_sessions_per_week + 1):
+                items = []
+                for code in top:
+                    drills = DRILLS[code]
+                    dr = drills[n % len(drills)]
+                    items.append(PlanItem(fault=names.get(code, code.replace("_", " ").title()),
+                                          drill=dr.name, description=dr.description,
+                                          reps=dr.reps))  # fmt: skip
+                n += 1
+                sessions.append(PlanSession(week=week, session=k, items=items))
+        plan = DrillPlan(created=datetime.now(UTC),
+                         faults=[names.get(c, c) for c in top], sessions=sessions)  # fmt: skip
+        path = bowler_file(bowler_id, "plan.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(plan.model_dump_json(), encoding="utf-8")
+        return plan
+
+    @app.put("/bowlers/{bowler_id}/plan")
+    def save_plan(bowler_id: str, body: DrillPlan) -> DrillPlan:
+        """Save the plan (used to tick drills off)."""
+        path = bowler_file(bowler_id, "plan.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body.model_dump_json(), encoding="utf-8")
+        return body
+
+    @app.get("/bowlers/{bowler_id}/goals")
+    def get_goals(bowler_id: str) -> GoalsIn:
+        """The bowler's goals."""
+        path = bowler_file(bowler_id, "goals.json")
+        return (
+            GoalsIn.model_validate_json(path.read_text("utf-8"))
+            if path.is_file()
+            else GoalsIn(goals=[])
+        )
+
+    @app.put("/bowlers/{bowler_id}/goals")
+    def put_goals(bowler_id: str, body: GoalsIn) -> GoalsIn:
+        """Replace the bowler's goals."""
+        path = bowler_file(bowler_id, "goals.json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body.model_dump_json(), encoding="utf-8")
+        return body
 
     @app.get("/bowlers/{bowler_id}/progress")
     def bowler_progress(bowler_id: str) -> ProgressOut:
@@ -482,6 +636,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         slow_motion: Annotated[float | None, Form(gt=0, le=64)] = None,
         camera_view: Annotated[Literal["side", "front", "behind"] | None, Form()] = None,
         recorded_at: Annotated[datetime | None, Form()] = None,
+        sleep: Annotated[int | None, Form(ge=1, le=5)] = None,
+        soreness: Annotated[int | None, Form(ge=1, le=5)] = None,
+        effort: Annotated[int | None, Form(ge=1, le=10)] = None,
+        capture_fps: Annotated[float | None, Form(gt=0, le=480)] = None,
         pose_file: Annotated[
             UploadFile | None, File(description="optional PoseSequence JSON")
         ] = None,
@@ -495,6 +653,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             state.repo.get_bowler(bowler_id)
         max_bytes = settings.api.max_upload_mb * 1024 * 1024
         rel = state.storage.save_upload(file.file, name, VIDEO_EXTENSIONS, max_bytes)
+        if suffix == ".webm" or capture_fps:  # an in-app recording: make it constant-rate MP4
+            src = state.storage.resolve(rel)
+            try:
+                dst = transcode_cfr(src, src.with_suffix(".rec.mp4"), capture_fps or 30.0,
+                                    settings.render.ffmpeg_preset, settings.render.crf)  # fmt: skip
+            finally:
+                src.unlink(missing_ok=True)
+            final = src.with_name(f"{src.stem}.mp4")
+            dst.replace(final)
+            rel = state.storage.relative(final)
         try:
             if pose_file is not None and pose_file.filename:
                 pose_rel = pose_upload_path(rel)
@@ -505,7 +673,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 state.storage.resolve(saved).replace(target)
             options = {"allow_low_fps": allow_low_fps, "bowler_track_id": bowler_track_id,
                        "bowling_arm": bowling_arm, "slow_motion": slow_motion,
-                       "camera_view": camera_view}  # fmt: skip
+                       "camera_view": camera_view,
+                       "readiness": ({"sleep": sleep, "soreness": soreness, "effort": effort}
+                                     if sleep or soreness or effort else None)}  # fmt: skip
             session = state.repo.create_session(
                 rel, bowler_id=bowler_id or None, recorded_at=recorded_at,
                 options=options, original_name=name,
@@ -624,6 +794,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         pdf = state.output_dir(session_id) / "report.pdf"
         if not pdf.is_file():
             raise HTTPException(404, "The report isn't ready yet.")
+        # append the live appendix (measurements, notes, progress) when there is one
+        out_dir = state.output_dir(session_id)
+        marks: list[tuple[int, dict[str, Any]]] = []
+        for path in sorted((out_dir / "annotations").glob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            marks += [(int(path.stem), m) for m in data.get("annotations", [])]
+        session = state.repo.get_session(session_id)
+        progress: list[dict[str, Any]] = []
+        bowler_name = None
+        if session.bowler_id:
+            bowler_name = state.repo.get_bowler(session.bowler_id).name
+            progress = [
+                p.model_dump(mode="json") for p in bowler_progress(session.bowler_id).points
+            ]
+        appendix = build_appendix(out_dir / "appendix.pdf", out_dir / "charts", marks, progress,
+                                  bowler_name)  # fmt: skip
+        if appendix is not None:
+            pdf = merge_pdfs([pdf, appendix], out_dir / "report_full.pdf")
         return FileResponse(
             pdf, media_type="application/pdf", filename=f"bowlsense_{session_id[:8]}.pdf"
         )
@@ -749,6 +937,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             filename=f"bowlsense_delivery{ref.idx + 1}_release.{fmt}",
         )
 
+    @app.get("/sessions/{session_id}/reel.mp4")
+    def highlight_reel(session_id: str) -> FileResponse:
+        """A slow-motion highlight reel: the best and the worst delivery by technique score,
+        each after a title card. Made on first request and cached."""
+        result = state.result(session_id)
+        out_dir = state.output_dir(session_id)
+        session = state.repo.get_session(session_id)
+        if result is None or not result.deliveries or not (out_dir / "pose.json").is_file():
+            raise HTTPException(409, "This session has no analysed deliveries to make a reel from.")
+        ds = result.deliveries
+        best = max(ds, key=lambda d: d.technique_score)
+        worst = min(ds, key=lambda d: d.technique_score)
+        picks = [(best, f"Best delivery: #{best.delivery_idx + 1}",
+                  f"Technique {best.technique_score:.0f}/100")]  # fmt: skip
+        if worst.delivery_idx != best.delivery_idx:
+            names = ", ".join(f.name for f in worst.faults[:2]) or "no faults flagged"
+            picks.append((worst, f"Most to work on: #{worst.delivery_idx + 1}",
+                           f"Technique {worst.technique_score:.0f}/100 - {names}"))  # fmt: skip
+        key = "_".join(f"{d.delivery_idx}f{d.clip_start + d.phases.release}" for d, _, _ in picks)
+        target = out_dir / "clips" / f"reel_{key}.mp4"
+        if not target.is_file():
+            seq = PoseSequence.model_validate_json((out_dir / "pose.json").read_text("utf-8"))
+            write_highlight_reel(state.storage.resolve(session.video_path, within="raw"), seq,
+                                 picks, settings.render, target)  # fmt: skip
+        return FileResponse(target, media_type="video/mp4", filename="bowlsense_highlights.mp4")
+
+    @app.get("/deliveries/{delivery_id}/poster.png")
+    def poster(delivery_id: str) -> FileResponse:
+        """A shareable image of the release frame with the verdict and key numbers."""
+        ref, result, out_dir = _delivery_files(delivery_id)
+        d = result.deliveries[ref.idx]
+        if not (out_dir / "pose.json").is_file():
+            raise HTTPException(409, "This session has no saved skeleton to draw the poster from.")
+        session = state.repo.get_session(ref.session_id)
+        target = (
+            out_dir / "posters" / f"poster_{ref.idx + 1}_f{d.clip_start + d.phases.release}.png"
+        )
+        if not target.is_file():
+            seq = PoseSequence.model_validate_json((out_dir / "pose.json").read_text("utf-8"))
+            bm = {m.key: m for m in d.biomechanics}
+
+            def num(v: float | None, unit: str, nd: int = 0) -> str:
+                return "-" if v is None else f"{v:.{nd}f}{unit}"
+
+            verdict = (("LEGAL", (46, 112, 72)) if d.legality.verdict == "legal"
+                       else ("NOT LEGAL", (179, 38, 30)))  # fmt: skip
+            facts = [
+                ("Elbow straightening", num(d.legality.elbow_extension_deg, " deg", 1)
+                 + ("" if d.legality.screened else " (unverified)")),
+                ("Arm speed", num(bm["arm_angular_velocity"].value if "arm_angular_velocity" in bm
+                                  else None, " deg/s")),
+                ("Release height", num(d.release_height_pct, "% of height")),
+                ("Technique", num(d.technique_score, " / 100")),
+                ("Injury load", f"{d.injury.overall:.0f} / 100 ({d.injury.band})"),
+                ("Speed", num(d.speed_kmh, " km/h") if d.speed_kmh is not None
+                 else num(d.speed_estimate_kmh, " km/h (rough)")),
+            ]  # fmt: skip
+            write_poster(state.storage.resolve(session.video_path, within="raw"), seq, d, facts,
+                         verdict, f"Delivery {ref.idx + 1} at release", settings.render,
+                         target)  # fmt: skip
+        return FileResponse(target, media_type="image/png",
+                            filename=f"bowlsense_delivery{ref.idx + 1}_poster.png")  # fmt: skip
+
     @app.get("/deliveries/{delivery_id}/annotations")
     def get_annotations(delivery_id: str) -> AnnotationsIn:
         """The lines and angles drawn on this delivery's frames."""
@@ -834,6 +1085,12 @@ API_MODELS: tuple[type[BaseModel], ...] = (
     ProgressDelivery,
     ProgressPoint,
     ProgressOut,
+    SpellLimit,
+    PlanItem,
+    PlanSession,
+    DrillPlan,
+    Goal,
+    GoalsIn,
     EvaluationReport,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

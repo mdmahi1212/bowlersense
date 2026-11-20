@@ -51,6 +51,26 @@ ASSETS: tuple[Asset, ...] = (
         "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
         5.6,
     ),
+    # high-accuracy models, used automatically when a CUDA GPU is available
+    Asset(
+        "rtmpose-x_halpe26_384x288.onnx",
+        "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/"
+        "rtmpose-x_simcc-body7_pt-body7-halpe26_700e-384x288-7fb6e239_20230606.zip",
+        190.0,
+        member="end2end.onnx",
+    ),
+    Asset(
+        "yolo11x.pt",
+        "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11x.pt",
+        114.0,
+    ),
+    # MotionBERT-Lite 3D-lifting checkpoint (scripts/export_motionbert.py turns it into ONNX)
+    Asset(
+        "motionbert_lite_best_epoch.bin",
+        "https://huggingface.co/walterzhu/MotionBERT/resolve/main/checkpoint/pose3d/"
+        "FT_MB_lite_MB_ft_h36m_global_lite/best_epoch.bin",
+        64.0,
+    ),
     Asset(
         "pose_landmarker_full.task",
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"

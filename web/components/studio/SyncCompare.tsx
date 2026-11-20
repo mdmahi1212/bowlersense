@@ -181,6 +181,7 @@ export function SyncCompare({ a, b, edges }: { a: Side; b: Side; edges: string[]
         </label>
       </div>
 
+      <WhatChanged a={a} b={b} />
       <table className="w-full text-sm">
         <thead>
           <tr className="kicker text-left">
@@ -317,5 +318,54 @@ function Pane({
         <span className="tabular text-muted">f {frame}</span>
       </figcaption>
     </figure>
+  );
+}
+
+/** The biggest differences between two deliveries' measurements, in words. */
+function WhatChanged({ a, b }: { a: Side; b: Side }) {
+  const mb = new Map(b.out.delivery.biomechanics.map((m) => [m.key, m]));
+  const rows = a.out.delivery.biomechanics
+    .map((ma) => {
+      const m2 = mb.get(ma.key);
+      if (!m2 || ma.value === null || m2.value === null) return null;
+      const diff = m2.value - ma.value;
+      const rel = Math.abs(diff) / Math.max(Math.abs(ma.value), Math.abs(m2.value), 1);
+      return { name: ma.name, unit: ma.unit, va: ma.value, vb: m2.value, diff, rel };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null && r.rel > 0.05)
+    .sort((x, y) => y.rel - x.rel)
+    .slice(0, 8);
+  const unit = (u: string) => (u === "deg" ? "°" : u === "deg/s" ? "°/s" : ` ${u}`);
+  return (
+    <section>
+      <h3 className="mb-3 font-display text-2xl">What changed from A to B</h3>
+      {rows.length === 0 ? (
+        <p className="text-muted">The two deliveries measure almost the same.</p>
+      ) : (
+        <ol className="divide-y divide-border border-y border-border">
+          {rows.map((r, i) => (
+            <li
+              key={r.name}
+              data-reveal
+              style={{ "--d": `${i * 50}ms` } as React.CSSProperties}
+              className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-baseline gap-4 py-3"
+            >
+              <span className="tabular text-xs text-accent">{String(i + 1).padStart(2, "0")}</span>
+              <span>
+                {r.name} is{" "}
+                <b className="tabular">
+                  {Math.abs(r.diff).toFixed(Math.abs(r.diff) < 10 ? 1 : 0)}
+                  {unit(r.unit)}
+                </b>{" "}
+                {r.diff > 0 ? "higher" : "lower"} in B
+              </span>
+              <span className="tabular text-sm text-muted">
+                {r.va.toFixed(1)} → {r.vb.toFixed(1)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }

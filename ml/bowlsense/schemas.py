@@ -366,6 +366,15 @@ class BiomechMetric(_Model):
     not_measured: str | None = None
 
 
+class NoBallResult(_Model):
+    """Outcome of the front-foot check."""
+
+    status: Literal["legal", "no_ball", "not_found"]
+    margin_cm: float | None = None  # + = heel beyond the line (no-ball), - = behind it
+    line: list[tuple[float, float]] | None = None  # the crease segment found (video pixels)
+    note: str
+
+
 class DeliveryMetrics(_Model):
     """Everything measured for one delivery.
 
@@ -401,6 +410,8 @@ class DeliveryMetrics(_Model):
     keyframes: dict[str, str] = Field(default_factory=dict)  # event -> artifact path
     biomechanics: list[BiomechMetric] = Field(default_factory=list)
     biomech_curves: list[AngleSeries] = Field(default_factory=list)  # angles + *_velocity
+    speed_estimate_kmh: float | None = None  # rough, uncalibrated (assumed body height)
+    no_ball: NoBallResult | None = None  # auto-detected crease check at FFC
 
 
 class FatigueInput(_Model):

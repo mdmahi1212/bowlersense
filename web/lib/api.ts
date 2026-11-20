@@ -3,6 +3,9 @@
  * which is generated from the Python pydantic models.
  */
 import type {
+  DrillPlan,
+  Goal,
+  GoalsIn,
   Annotation,
   AnnotationsIn,
   ProgressOut,
@@ -155,12 +158,25 @@ export const api = {
       method: "PUT",
       ...json({ annotations }),
     }),
+  plan: (id: string) => request<DrillPlan | null>(`/bowlers/${encodeURIComponent(id)}/plan`),
+  makePlan: (id: string) =>
+    request<DrillPlan>(`/bowlers/${encodeURIComponent(id)}/plan`, { method: "POST" }),
+  savePlan: (id: string, plan: DrillPlan) =>
+    request<DrillPlan>(`/bowlers/${encodeURIComponent(id)}/plan`, { method: "PUT", ...json(plan) }),
+  goals: (id: string) => request<GoalsIn>(`/bowlers/${encodeURIComponent(id)}/goals`),
+  saveGoals: (id: string, goals: Goal[]) =>
+    request<GoalsIn>(`/bowlers/${encodeURIComponent(id)}/goals`, {
+      method: "PUT",
+      ...json({ goals }),
+    }),
   progress: (id: string) => request<ProgressOut>(`/bowlers/${encodeURIComponent(id)}/progress`),
   evaluation: () => request<EvaluationReport>("/evaluation"),
   drills: () => request<Record<string, Drill[]>>("/drills"),
   references: () => request<ReferencesOut>("/references"),
 
   reportUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/report.pdf`,
+  reelUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/reel.mp4`,
+  posterUrl: (id: string) => `${apiBase()}/deliveries/${encodeURIComponent(id)}/poster.png`,
   clipUrl: (id: string, format: "mp4" | "gif") =>
     `${apiBase()}/deliveries/${encodeURIComponent(id)}/clip?format=${format}`,
   videoUrl: (id: string) => `${apiBase()}/sessions/${encodeURIComponent(id)}/video`,
@@ -176,6 +192,10 @@ export interface UploadFields {
   /** Times slowed down; undefined = detect it, 1 = real time. */
   slowMotion?: number;
   cameraView?: "side" | "front" | "behind";
+  /** Readiness check before the session: sleep 1-5, soreness 1-5, effort 1-10. */
+  readiness?: { sleep: number; soreness: number; effort: number } | null;
+  /** Frame rate of an in-app camera recording (the server converts it to constant rate). */
+  captureFps?: number;
 }
 
 /** Multipart upload with progress (XHR, since fetch has no upload progress). */
@@ -192,6 +212,12 @@ export function uploadSession(
   if (fields.allowLowFps) form.append("allow_low_fps", "true");
   if (fields.slowMotion) form.append("slow_motion", String(fields.slowMotion));
   if (fields.cameraView) form.append("camera_view", fields.cameraView);
+  if (fields.captureFps) form.append("capture_fps", String(fields.captureFps));
+  if (fields.readiness) {
+    form.append("sleep", String(fields.readiness.sleep));
+    form.append("soreness", String(fields.readiness.soreness));
+    form.append("effort", String(fields.readiness.effort));
+  }
   const promise = new Promise<SessionOut>((resolve, reject) => {
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);

@@ -34,21 +34,29 @@ export default function SessionsPage() {
         title="Sessions"
         deck="Every clip you have analysed on this computer, newest first."
         aside={
-          <label className="flex items-center gap-3 text-sm">
-            <span className="kicker">Bowler</span>
-            <select
-              value={bowlerId}
-              onChange={(e) => setBowlerId(e.target.value)}
-              className="border-b border-foreground/60 bg-transparent py-1.5 outline-none"
+          <>
+            <Link
+              href="/sessions/compare"
+              className="border border-foreground px-4 py-2 text-sm hover:bg-foreground hover:text-background"
             >
-              <option value="">All bowlers</option>
-              {(bowlers.data ?? []).map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              Compare two sessions
+            </Link>
+            <label className="flex items-center gap-3 text-sm">
+              <span className="kicker">Bowler</span>
+              <select
+                value={bowlerId}
+                onChange={(e) => setBowlerId(e.target.value)}
+                className="border-b border-foreground/60 bg-transparent py-1.5 outline-none"
+              >
+                <option value="">All bowlers</option>
+                {(bowlers.data ?? []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
         }
       />
       {error && <ErrorBox error={error} />}

@@ -5,8 +5,8 @@ import { BowlingLoop } from "@/components/art/BowlingLoop";
 import { cn } from "@/lib/utils";
 
 const ACCEPT =
-  ".mp4,.mov,.avi,.jpg,.jpeg,.png,video/mp4,video/quicktime,video/x-msvideo,image/jpeg,image/png";
-const EXTENSIONS = [".mp4", ".mov", ".avi", ".jpg", ".jpeg", ".png"];
+  ".mp4,.mov,.avi,.webm,.jpg,.jpeg,.png,video/mp4,video/quicktime,video/x-msvideo,video/webm,image/jpeg,image/png";
+const EXTENSIONS = [".mp4", ".mov", ".avi", ".webm", ".jpg", ".jpeg", ".png"];
 
 /** True for the photo types that go to image mode. */
 export const isImage = (f: File): boolean => /\.(jpe?g|png)$/i.test(f.name);
@@ -15,10 +15,13 @@ export const isImage = (f: File): boolean => /\.(jpe?g|png)$/i.test(f.name);
 export function UploadDropzone({
   file,
   onFile,
+  onFiles,
   disabled,
 }: {
   file: File | null;
   onFile: (file: File | null, error?: string) => void;
+  /** Several videos dropped at once (batch upload). */
+  onFiles?: (files: File[]) => void;
   disabled?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -33,10 +36,22 @@ export function UploadDropzone({
     );
   }
 
+  function pickMany(list: FileList | null) {
+    const all = Array.from(list ?? []);
+    const videos = all.filter(
+      (f) => !isImage(f) && EXTENSIONS.some((e) => f.name.toLowerCase().endsWith(e)),
+    );
+    if (all.length > 1 && onFiles) {
+      if (videos.length < all.length)
+        onFile(null, "Batch upload takes videos only (MP4, MOV, AVI).");
+      if (videos.length) onFiles(videos);
+    } else pick(all[0]);
+  }
+
   function drop(e: DragEvent) {
     e.preventDefault();
     setOver(false);
-    if (!disabled) pick(e.dataTransfer.files[0]);
+    if (!disabled) pickMany(e.dataTransfer.files);
   }
 
   return (
@@ -72,7 +87,8 @@ export function UploadDropzone({
         accept={ACCEPT}
         className="hidden"
         data-testid="video-input"
-        onChange={(e) => pick(e.target.files?.[0])}
+        multiple={Boolean(onFiles)}
+        onChange={(e) => pickMany(e.target.files)}
       />
       <BowlingLoop className="mx-auto h-52 w-auto text-[#f2eee5] sm:h-60" />
       <div>
@@ -91,7 +107,8 @@ export function UploadDropzone({
               Drop a bowling video here, or click to choose one.
             </p>
             <p className="mt-3 text-sm text-[#f2eee5]/60">
-              MP4, MOV or AVI up to 500 MB. A JPG or PNG gives a single-frame posture check.
+              MP4, MOV or AVI up to 500 MB, or several at once to queue them. A JPG or PNG gives a
+              single-frame posture check.
             </p>
           </>
         )}
