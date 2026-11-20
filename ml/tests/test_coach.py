@@ -114,6 +114,10 @@ def test_limit_words() -> None:
     assert limit_words(long, 100) == long
     assert limit_words(long, 8) == "One two three. Four five six seven."
     assert limit_words("a b c d e f", 3) == "a b c..."
+    listed = "Work on these. 1. Brace the knee firmly. 2. Shorten the stride. 3. Stay tall"
+    assert (
+        limit_words(listed, 13) == "Work on these. 1. Brace the knee firmly. 2. Shorten the stride."
+    )
 
 
 def test_system_prompt_rules() -> None:

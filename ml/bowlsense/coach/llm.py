@@ -108,14 +108,22 @@ class OllamaClient:
         raise OllamaUnavailableError(f"Ollama chat failed: {last}") from last
 
 
+_SENTENCE_END = re.compile(r"(?<![0-9])[.!?](?=\s|$)")
+
+
 def limit_words(text: str, max_words: int) -> str:
-    """Trim to at most ``max_words`` words, ending at a sentence boundary when possible."""
+    """Trim to at most ``max_words`` words, ending at a sentence boundary when possible.
+
+    A list number such as ``3.`` is not a sentence end, so a cut never leaves a dangling item.
+    """
     words = text.split()
     if len(words) <= max_words:
         return text.strip()
     cut = " ".join(words[:max_words])
-    end = max(cut.rfind(". "), cut.rfind(".\n"), cut.rfind("! "), cut.rfind("? "))
-    return (cut[: end + 1] if end > len(cut) // 2 else cut.rstrip(",;:") + "...").strip()
+    ends = [m.end() for m in _SENTENCE_END.finditer(cut)]
+    if ends and ends[-1] > len(cut) // 2:
+        return cut[: ends[-1]].strip()
+    return cut.rstrip(",;:") + "..."
 
 
 def _num(value: float) -> str:

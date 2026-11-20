@@ -33,7 +33,7 @@ All pass. Known limitations are listed at the end of README.md.
   - recording tips, CLI and web usage;
   - two Mermaid diagrams (system and pipeline), the module table, development notes, limitations and disclaimers.
 - **`.env.example`** lists every environment variable. `data/settings.json` is gitignored.
-- Real LLM check: Ollama is installed on this machine with only `gemma4:26b` pulled. A real report request with it timed out after 900 s on CPU and fell back to the template report, as designed. The live-LLM path is therefore verified against mocks only; a small model (`qwen2.5:3b`, set on the Settings page) is the practical choice for CPU.
+- Real LLM check: `qwen2.5:3b` was pulled and selected on this machine (local settings; the config default stays `llama3.1:8b`). Live results on CPU: the session report took 6–22 s (about 230–240 words, citing the numbers, with drills and the see-a-professional advice) and a chat reply took 4 s. `gemma4:26b` timed out after 900 s on CPU and fell back to the template, as designed. The live run showed the model can overrun the word limit, and trimming then left a dangling list number ("3."). `limit_words` now cuts only at real sentence ends, with a test.
 
 ### Evaluation (`scripts/evaluate.py`)
 
@@ -405,4 +405,4 @@ The spec was revised to be **100% local** (no Supabase, no hosted APIs, Ollama f
 
 ---
 
-**Next**: nothing required. Optional: pull a small Ollama model (e.g. `qwen2.5:3b`) for the live AI coach on CPU, and add hand-labelled frames to `data/eval/pose_labels.json` for a pose PCK figure.
+**Next**: nothing required. Optional: add hand-labelled frames to `data/eval/pose_labels.json` for a pose PCK figure.
