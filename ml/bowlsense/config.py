@@ -142,6 +142,11 @@ class LegalitySettings(_Section):
     medium_conf_fps: float = Field(gt=0)
     fit_degree: int = Field(ge=1, le=5)
     fit_pad_s: float = Field(ge=0)
+    screen_min_fps: float = Field(gt=0)
+    screen_views: tuple[Literal["side", "front", "behind", "unknown"], ...] = Field(min_length=1)
+    screen_min_phase_confidence: float = Field(ge=0, le=1)
+    screen_max_window_s: float = Field(gt=0)
+    screen_max_plausible_deg: float = Field(gt=0)
 
 
 class AlignmentSettings(_Section):

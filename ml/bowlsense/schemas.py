@@ -238,11 +238,18 @@ class InjuryFeatures(_Model):
 
 
 class LegalityResult(_Model):
-    """Elbow-extension screening result."""
+    """Elbow-extension screening result.
+
+    ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
+    camera view, phase events out of order, implausible value); then ``flagged`` is always
+    False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
+    """
 
     elbow_extension_deg: float
     threshold_deg: float
     flagged: bool
+    screened: bool = True
+    not_screened_reason: str | None = None
     confidence: Confidence
     note: str = "2D video screening only. The official ICC test uses 3D motion capture."
     front_foot_no_ball: bool | None = None

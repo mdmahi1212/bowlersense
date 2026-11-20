@@ -346,3 +346,40 @@ def _no_person(img: object, s: object) -> object:
     from bowlsense.errors import NoBowlerDetectedError
 
     raise NoBowlerDetectedError("No person found in the image. Use a photo of the bowler.")
+
+
+def test_worker_survives_session_deleted_mid_job(
+    env: Env, clip: tuple[bytes, bytes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting a session while it is analysed must not crash the worker (it skips the job)."""
+    import threading
+
+    import bowlsense.worker as worker_mod
+
+    session = env.upload(clip)["session"]
+    assert isinstance(session, dict)
+    sid = session["id"]
+
+    def deleting_pipeline(*args: object, **kwargs: object) -> object:
+        env.client.delete(f"/sessions/{sid}")  # the user deletes it mid-run
+        progress = kwargs["progress"]
+        assert callable(progress)
+        progress(50.0, "pose")  # the next progress write finds no job
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(worker_mod, "run_pipeline", deleting_pipeline)
+    assert env.worker.run_once() is True  # no exception escapes
+    assert env.client.get(f"/sessions/{sid}").status_code == 404
+    stop = threading.Event()
+    calls = []
+
+    def boom() -> bool:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("db hiccup")
+        stop.set()
+        return False
+
+    monkeypatch.setattr(env.worker, "run_once", boom)
+    env.worker.run_forever(stop)  # keeps polling after an unexpected error
+    assert len(calls) == 2

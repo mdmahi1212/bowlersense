@@ -18,6 +18,7 @@ from pathlib import Path
 from bowlsense.config import Settings, load_settings
 from bowlsense.db.repo import JobRecord, Repository
 from bowlsense.db.session import get_engine
+from bowlsense.errors import NotFoundError
 from bowlsense.local_settings import LocalSettings, effective_settings, load_local_settings
 from bowlsense.offline import enable_if_requested
 from bowlsense.pipeline import PipelineOptions, run_pipeline
@@ -106,10 +107,24 @@ class Worker:
             log.info("job %s done (%d deliveries)", job.id, len(result.deliveries))
             return result
         except Exception as exc:
+            if isinstance(exc, NotFoundError) and self._deleted(job):
+                log.info("job %s: its session was deleted while running; skipped", job.id)
+                return None
             detail = f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
             log.error("job %s failed: %s", job.id, exc)
-            self.repo.fail_job(job.id, detail, self.settings.jobs.max_attempts)
+            try:
+                self.repo.fail_job(job.id, detail, self.settings.jobs.max_attempts)
+            except NotFoundError:
+                log.info("job %s: its session was deleted while running; skipped", job.id)
             return None
+
+    def _deleted(self, job: JobRecord) -> bool:
+        """True if the job (and so its session) no longer exists."""
+        try:
+            self.repo.get_job(job.id)
+        except NotFoundError:
+            return True
+        return False
 
     def run_once(self) -> bool:
         """Claim and run the next queued job; ``False`` if there was none."""
@@ -125,7 +140,12 @@ class Worker:
         stop = stop or threading.Event()
         log.info("worker polling every %.1f s", self.settings.jobs.poll_interval_s)
         while not stop.is_set():
-            if not self.run_once():
+            try:
+                busy = self.run_once()
+            except Exception:  # one bad job or a DB hiccup must never stop the worker
+                log.exception("worker: unexpected error; continuing")
+                busy = False
+            if not busy:
                 stop.wait(self.settings.jobs.poll_interval_s)
 
 

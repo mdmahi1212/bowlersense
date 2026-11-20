@@ -141,6 +141,34 @@ def front_foot_no_ball(
     return not behind
 
 
+def screening_problems(
+    seq: PoseSequence, phases: PhaseEvents, extension: float, settings: LegalitySettings
+) -> list[str]:
+    """Why this clip can't be screened for elbow extension (empty list = it can)."""
+    problems = []
+    if seq.fps < settings.screen_min_fps:
+        problems.append(
+            f"the video is {seq.fps:.0f} fps; at least {settings.screen_min_fps:.0f} fps is "
+            "needed to see the elbow straighten"
+        )
+    if seq.view not in settings.screen_views:
+        problems.append(f"the camera is {seq.view}-on; elbow angles need a side-on camera")
+    if phases.confidence < settings.screen_min_phase_confidence:
+        problems.append("the delivery phases couldn't be found reliably")
+    window_s = (phases.release - phases.arm_horizontal) / seq.fps
+    if window_s > settings.screen_max_window_s:
+        problems.append(
+            f"arm-horizontal to release spans {window_s:.2f} s (real deliveries take about "
+            "0.1 s), so the phases are wrong"
+        )
+    if extension > settings.screen_max_plausible_deg:
+        problems.append(
+            f"the measured {extension:.0f} deg is beyond what an elbow can straighten, so the "
+            "arm wasn't tracked correctly"
+        )
+    return problems
+
+
 def assess_legality(
     seq: PoseSequence,
     phases: PhaseEvents,
@@ -156,7 +184,8 @@ def assess_legality(
     then fitted over the AH-release window (``fitted_elbow_angles``).
 
     Elbow angles only move in the image plane from a side-on camera, so other views cap
-    confidence at "low".
+    confidence at "low". Clips that can't support a trustworthy measurement are reported as
+    not screened (never flagged); see ``screening_problems``.
     """
     angles = elbow_angles(raw if raw is not None else seq)
     fitted = fitted_elbow_angles(angles, phases.arm_horizontal, phases.release, seq.fps, settings)
@@ -166,10 +195,18 @@ def assess_legality(
     if seq.view not in ("side", "unknown"):
         confidence = "low"
         note += " Elbow angles are only reliable from a side-on camera."
+    problems = screening_problems(seq, phases, extension, settings)
+    reason = None
+    if problems:
+        reason = "Not screened: " + "; ".join(problems) + "."
+        note += " " + reason
+        confidence = "low"
     return LegalityResult(
         elbow_extension_deg=extension,
         threshold_deg=settings.elbow_extension_threshold_deg,
-        flagged=extension > settings.elbow_extension_threshold_deg,
+        flagged=not problems and extension > settings.elbow_extension_threshold_deg,
+        screened=not problems,
+        not_screened_reason=reason,
         confidence=confidence,
         note=note,
         front_foot_no_ball=(

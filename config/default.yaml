@@ -59,6 +59,12 @@ legality:
   medium_conf_fps: 120        # "medium" needs this fps; below it is "low"
   fit_degree: 3               # elbow angle is fitted with this polynomial around AH..release
   fit_pad_s: 0.02             # ...extending the fit this far either side of the window
+  # Screening is only done (and a delivery only flagged) when the measurement can be trusted:
+  screen_min_fps: 60          # below this the elbow straightens within a frame or two
+  screen_views: [side, unknown]  # elbow angles are foreshortened from front-on/behind
+  screen_min_phase_confidence: 0.5  # phase events out of order (0.2) -> wrong window
+  screen_max_window_s: 0.3    # arm-horizontal -> release takes ~0.05-0.15 s in real bowling
+  screen_max_plausible_deg: 45  # more elbow straightening than this is a tracking error
 alignment:
   mixed_threshold_deg: 30
   counter_rotation_flag_deg: 30

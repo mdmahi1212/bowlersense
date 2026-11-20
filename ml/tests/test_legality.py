@@ -221,3 +221,30 @@ def test_assess_legality_includes_no_ball() -> None:
     )
     assert res.front_foot_no_ball is False
     assert assess_legality(r.sequence, r.phases, s.legality).front_foot_no_ball is None
+
+
+# --- screening gate: never flag what can't be measured ------------------------------------------
+
+
+def test_untrustworthy_clips_are_not_screened() -> None:
+    """A clean 22 deg throw is flagged; the same clip is not flagged when the measurement
+    can't be trusted (low fps, front view, broken phases, long window, implausible value)."""
+    s = load_settings()
+    r = generate(SynthParams(elbow_extension_deg=22.0, fps=120.0))
+    seq = clean_sequence(r.sequence, s.pose)
+    ok = assess_legality(seq, r.phases, s.legality)
+    assert ok.flagged and ok.screened and ok.not_screened_reason is None
+
+    def check(seq_: object, phases: object, settings: object, needle: str) -> None:
+        res = assess_legality(seq_, phases, settings)  # type: ignore[arg-type]
+        assert not res.flagged and not res.screened and res.confidence == "low"
+        assert res.not_screened_reason is not None and needle in res.not_screened_reason
+        assert res.note.startswith(ICC_NOTE) and "Not screened" in res.note
+
+    leg = s.legality
+    check(seq, r.phases, leg.model_copy(update={"screen_min_fps": 200.0}), "fps")
+    check(seq.model_copy(update={"view": "front"}), r.phases, leg, "side-on")
+    check(seq, r.phases.model_copy(update={"confidence": 0.2}), leg, "phases couldn't")
+    early = r.phases.model_copy(update={"arm_horizontal": r.phases.release - 60})
+    check(seq, early, leg, "spans")
+    check(seq, r.phases, leg.model_copy(update={"screen_max_plausible_deg": 10.0}), "beyond")

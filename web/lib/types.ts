@@ -236,6 +236,10 @@ export interface PhaseEvents {
 /**
  * Elbow-extension screening result.
  *
+ * ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
+ * camera view, phase events out of order, implausible value); then ``flagged`` is always
+ * False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
+ *
  * This interface was referenced by `BowlSense`'s JSON-Schema
  * via the `definition` "LegalityResult".
  */
@@ -243,6 +247,8 @@ export interface LegalityResult {
   elbow_extension_deg: number;
   threshold_deg: number;
   flagged: boolean;
+  screened: boolean;
+  not_screened_reason: string | null;
   confidence: "low" | "medium" | "high";
   note: string;
   front_foot_no_ball: boolean | null;

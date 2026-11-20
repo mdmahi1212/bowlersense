@@ -47,6 +47,7 @@ class CoachSummary(BaseModel):
     technique_score_mean: float
     top_issues: list[IssueSummary]
     legality_flagged: int
+    legality_screened: int  # deliveries the clip allowed a trustworthy elbow measurement for
     legality_max_extension_deg: float
     legality_threshold_deg: float
     legality_note: str
@@ -109,6 +110,7 @@ def summarise_session(
             )
         )
     worst_injury = max(deliveries, key=lambda d: d.injury.overall)
+    screened = [d for d in deliveries if d.legality.screened]
     sims: dict[str, list[float]] = defaultdict(list)
     for d in deliveries:
         for c in d.comparisons:
@@ -121,9 +123,18 @@ def summarise_session(
         technique_score_mean=float(np.mean([d.faults.technique_score for d in deliveries])),
         top_issues=issues,
         legality_flagged=sum(d.legality.flagged for d in deliveries),
-        legality_max_extension_deg=max(d.legality.elbow_extension_deg for d in deliveries),
+        legality_screened=len(screened),
+        legality_max_extension_deg=max(
+            (d.legality.elbow_extension_deg for d in screened), default=0.0
+        ),
         legality_threshold_deg=deliveries[0].legality.threshold_deg,
-        legality_note=deliveries[0].legality.note,
+        legality_note=(
+            screened[0].legality.note
+            if screened
+            else "Elbow legality was not screened: this clip can't support a trustworthy "
+            "elbow measurement (needs a side-on camera at 60+ fps with the delivery phases "
+            "found)."
+        ),
         injury_overall_mean=float(np.mean([d.injury.overall for d in deliveries])),
         injury_band_worst=max((d.injury.band for d in deliveries), key=_BAND_ORDER.__getitem__),
         injury_top_drivers=worst_injury.injury.top_drivers,
@@ -148,7 +159,9 @@ def system_prompt(max_words: int, top: int) -> str:
         "each. Do not make any medical diagnosis or claim an injury; describe injury-risk "
         "figures only as screening estimates and suggest seeing a professional about pain. "
         "Describe elbow legality as 2D screening only (the official test uses 3D motion "
-        f"capture). Use plain language a player understands. At most {max_words} words."
+        "capture). If legality_screened is 0, say only that the elbow wasn't screened for this "
+        "clip and why; never quote an elbow angle or call the action illegal. "
+        f"Use plain language a player understands. At most {max_words} words."
     )
 
 

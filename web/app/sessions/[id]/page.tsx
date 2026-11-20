@@ -124,7 +124,10 @@ function Results({
   const technique = ds.reduce((a, d) => a + d.technique_score, 0) / Math.max(1, ds.length);
   const injury = ds.reduce((a, d) => a + d.injury.overall, 0) / Math.max(1, ds.length);
   const flagged = ds.filter((d) => d.legality.flagged).length;
-  const maxExt = Math.max(...ds.map((d) => d.legality.elbow_extension_deg));
+  const screened = ds.filter((d) => d.legality.screened);
+  const maxExt = Math.max(
+    ...ds.filter((d) => d.legality.screened).map((d) => d.legality.elbow_extension_deg),
+  );
 
   return (
     <>
@@ -155,15 +158,19 @@ function Results({
         </Card>
         <Card>
           <CardTitle>Elbow legality</CardTitle>
-          {flagged > 0 ? (
+          {screened.length === 0 ? (
+            <Badge>Not screened</Badge>
+          ) : flagged > 0 ? (
             <Badge className="border-bad/40 bg-bad/15 text-bad">
-              Flagged: {flagged} of {ds.length}
+              Flagged: {flagged} of {screened.length}
             </Badge>
           ) : (
             <Badge className="border-good/40 bg-good/15 text-good">Within 15°</Badge>
           )}
-          <p className="mt-2 text-sm">Max extension {fmt(maxExt, 1, "°")}</p>
-          <p className="mt-1 text-xs text-muted">{ds[0]?.legality.note}</p>
+          {screened.length > 0 && (
+            <p className="mt-2 text-sm">Max extension {fmt(maxExt, 1, "°")}</p>
+          )}
+          <p className="mt-1 text-xs text-muted">{(screened[0] ?? ds[0])?.legality.note}</p>
         </Card>
         <Card>
           <CardTitle>Consistency</CardTitle>
@@ -206,8 +213,14 @@ function Results({
                       {d.injury.overall.toFixed(0)} ({band.label})
                     </td>
                     <td className={`p-2 ${d.legality.flagged ? "text-bad" : ""}`}>
-                      {fmt(d.legality.elbow_extension_deg, 1, "°")}
-                      {d.legality.flagged ? " flagged" : ""}
+                      {d.legality.screened ? (
+                        <>
+                          {fmt(d.legality.elbow_extension_deg, 1, "°")}
+                          {d.legality.flagged ? " flagged" : ""}
+                        </>
+                      ) : (
+                        <span className="text-muted">not screened</span>
+                      )}
                     </td>
                     <td className="p-2">{d.faults.map((f) => f.name).join(", ") || "None"}</td>
                     <td className="p-2">{fmt(d.speed_kmh, 0, " km/h")}</td>

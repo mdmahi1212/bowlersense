@@ -81,7 +81,9 @@ function DeliveryView({ out }: { out: DeliveryOut }) {
           {d.delivery_type && (
             <Badge>{d.delivery_type.delivery_type === "fast" ? "Pace" : "Spin"}</Badge>
           )}
-          {d.legality.flagged ? (
+          {!d.legality.screened ? (
+            <Badge>Elbow not screened</Badge>
+          ) : d.legality.flagged ? (
             <Badge className="border-bad/40 bg-bad/15 text-bad">Elbow flagged</Badge>
           ) : (
             <Badge className="border-good/40 bg-good/15 text-good">Elbow within limit</Badge>
@@ -110,8 +112,14 @@ function DeliveryView({ out }: { out: DeliveryOut }) {
               <dd>{d.technique_score.toFixed(0)}/100</dd>
               <dt className="text-muted">Elbow extension</dt>
               <dd>
-                {fmt(d.legality.elbow_extension_deg, 1, "°")} (limit {d.legality.threshold_deg}°,{" "}
-                {d.legality.confidence} confidence)
+                {d.legality.screened ? (
+                  <>
+                    {fmt(d.legality.elbow_extension_deg, 1, "°")} (limit {d.legality.threshold_deg}
+                    °, {d.legality.confidence} confidence)
+                  </>
+                ) : (
+                  "Not screened (see note below)"
+                )}
               </dd>
               <dt className="text-muted">Stride</dt>
               <dd>{fmt(d.stride_pct, 0, "% of height")}</dd>
