@@ -287,7 +287,7 @@ def test_gate_pdf_opens_with_disclaimers(
     assert len(reader.pages) >= 2
     text = " ".join(page.extract_text() for page in reader.pages).replace("\n", " ")
     assert "2D video screening only" in text and "not medical advice" in text
-    assert "FLAGGED" in text and "Resolution is below 720p" in text
+    assert "NOT LEGAL" in text and "Resolution is below 720p" in text
     assert "Coach's notes" not in text
     assert (tmp_path / "charts" / "delivery_01_angles.png").is_file()
     assert LEGALITY_NOTE.startswith("2D") and "not medical advice" in INJURY_NOTE

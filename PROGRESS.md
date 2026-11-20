@@ -1,5 +1,22 @@
 # BowlSense — Progress
 
+## Real clips: slow motion, identity swaps, legality verdict, pick the bowler ✅ (2026-11-20)
+
+- **Legality verdict:** every delivery says **LEGAL**, **NOT LEGAL** or **CAN'T JUDGE** (with the reason). It appears on the session card, delivery table, delivery page, PDF and coach report.
+  - Clips that can't support a measurement are never flagged: below 60 fps real time, not side-on, release not after the delivery stride, or an implausible value (over 45°).
+  - When arm-horizontal is impossible, the elbow is measured over the last 80 ms before release, at low confidence.
+- **Slow motion** (`io/slowmo.py`): slowed clips (e.g. a 50 fps file of 200–400 fps footage) are analysed at the real-time rate (file fps × factor).
+  - The factor is detected from the bowling arm's peak rotation (about 1,700°/s for a pace bowler; it isn't affected by camera pans), with the wrist speed as a fallback. It can also be set on upload or with `--slow-motion`.
+  - Synthetic 4× and 8× clips are recovered exactly.
+  - The player shows real-time seconds.
+- **Camera view** can be set on upload or with `--view` when auto-detection is wrong.
+- **Tracking:**
+  - broken tracks are stitched (same place and size within 1 s);
+  - identity swaps are split by torso clothing colour, and pieces are joined only when their colours match.
+  - Thresholds were chosen on the dataset, not on one clip. Final selector on 85 held-out real deliveries: **88.2 %** (old rule 71.8 %), **92.6 %** when the bowler is tracked; the tracker ceiling is 95.3 %.
+- **Pick the bowler:** people.json stores every tracked person. The session page lets the user click the right person and re-run (`GET /sessions/{id}/people`, `POST /sessions/{id}/bowler`).
+- **Real clip** (side-on broadcast slow motion; the bowler passes in front of the batter): before, the app analysed the wrong 4 s, then the batter. Now it finds the bowler, a right-arm action and 4× slow motion (200 fps real), and with "side-on" chosen gives **LEGAL, 5.1°** (low confidence). The camera view is still auto-detected as front-on for this clip.
+
 ## Real-footage validation: bowler selection ✅ (2026-11-20)
 
 - **Why:** a user clip failed because the wrong person was picked as the bowler, and the synthetic tests can't catch that. The dataset labels the bowler's box in every frame, so this step can now be measured.

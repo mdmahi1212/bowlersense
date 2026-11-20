@@ -10,11 +10,22 @@ video:
   min_mean_keypoint_conf: 0.5
   front_view_width_ratio: 0.12   # shoulder width / body height above this in the run-up = front/behind
   approach_size_change: 0.15     # bowler grows (front) / shrinks (behind) by this fraction over the run-up
+  # Slow-motion clips (filmed fast, saved at 25-60 fps): real fps = file fps x slow-down factor.
+  slowmo_expected_arm_dps: 1700.0  # typical peak bowling-arm rotation (deg/s), side view
+  slowmo_expected_wrist_hps: 12.0  # typical peak bowling-wrist speed, body heights per second
+  slowmo_min_factor: 2.0           # auto-detect only when the clip looks at least this slowed
+  slowmo_factors: [2, 3, 4, 5, 6, 8, 10, 12, 16, 20]  # auto factor snaps to the nearest of these
 detect:
   yolo_model: yolo11n.pt          # in models/; person (class 0) and sports ball (class 32)
   person_conf: 0.3
   tracker: bytetrack.yaml         # bundled with ultralytics
   min_track_frames: 10            # shorter tracks are ignored when picking the bowler
+  stitch_max_gap_s: 1.0          # join a track lost for up to this long (file time)...
+  stitch_max_jump: 0.5            # ...if it reappears within this many box heights...
+  stitch_max_size_ratio: 1.5      # ...at a similar size (same person after an ID switch)
+  colour_window_s: 0.5            # torso-colour comparisons average this long (file time)
+  colour_split_threshold: 0.45    # clothing colours this different before/after -> the tracker swapped two people
+  colour_join_threshold: 0.6      # stitched pieces' overall colours must be at least this close
   selector_model: bowler_selector.json  # learned bowler selection (train/train_bowler_select.py); rules if absent
 pose:
   backend: rtm          # rtm | mediapipe
@@ -64,7 +75,8 @@ legality:
   screen_min_fps: 60          # below this the elbow straightens within a frame or two
   screen_views: [side, unknown]  # elbow angles are foreshortened from front-on/behind
   screen_min_phase_confidence: 0.5  # phase events out of order (0.2) -> wrong window
-  screen_max_window_s: 0.3    # arm-horizontal -> release takes ~0.05-0.15 s in real bowling
+  screen_max_window_s: 0.3    # arm-horizontal -> release takes ~0.05-0.15 s in real bowling...
+  fallback_window_s: 0.08     # ...so when AH is impossible, measure this long before release
   screen_max_plausible_deg: 45  # more elbow straightening than this is a tracking error
 alignment:
   mixed_threshold_deg: 30

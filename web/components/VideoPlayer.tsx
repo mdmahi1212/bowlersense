@@ -23,6 +23,7 @@ export function VideoPlayer({
   phases,
   seek,
   onFrame,
+  realFps,
 }: {
   overlaySrc: string;
   rawSrc: string;
@@ -32,6 +33,8 @@ export function VideoPlayer({
   phases: PhaseEvents;
   seek: SeekRequest | null;
   onFrame: (clipFrame: number) => void;
+  /** Real-time frame rate (differs from ``fps`` for slow-motion clips). */
+  realFps?: number;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [overlay, setOverlay] = useState(true);
@@ -122,8 +125,9 @@ export function VideoPlayer({
           →
         </Button>
         <span className="tabular-nums text-muted">
-          Frame {frame} / {length - 1} · {((frame - phases.release) / fps).toFixed(3)} s from
-          release
+          Frame {frame} / {length - 1} · {((frame - phases.release) / (realFps ?? fps)).toFixed(3)}{" "}
+          s from release
+          {realFps && realFps !== fps ? " (real time)" : ""}
         </span>
         <label className="ml-auto flex items-center gap-2">
           <input type="checkbox" checked={overlay} onChange={toggle} />

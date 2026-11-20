@@ -22,8 +22,8 @@ from typing import Any
 
 import numpy as np
 
-from bowlsense.config import load_settings
-from bowlsense.detect.person import PersonTrack, select_bowler
+from bowlsense.config import DetectSettings, load_settings
+from bowlsense.detect.person import PersonTrack, select_bowler, stitch_for
 from bowlsense.detect.selector import FEATURE_VERSION, FEATURES, feature_matrix
 from bowlsense.errors import NoBowlerDetectedError
 from train.eval_bowler import MIN_MATCH_FRACTION, TRACK_CACHE, legacy_select, match_fraction
@@ -35,13 +35,17 @@ log = logging.getLogger("train.bowler_select")
 class Clip:
     """One delivery's tracks, labels and per-track targets."""
 
-    def __init__(self, data: dict[str, Any], min_frames: int) -> None:
+    def __init__(
+        self, data: dict[str, Any], min_frames: int, stitch: DetectSettings | None
+    ) -> None:
         self.video: str = data["video"]
         self.split: str = data["split"]
         self.width, self.height = int(data["width"]), int(data["height"])
         self.n_frames = int(data["hi"]) - int(data["lo"])
         labels = {int(k): tuple(v) for k, v in data["labels"].items()}
         all_tracks = [PersonTrack.model_validate(t) for t in data["tracks"]]
+        if stitch is not None:
+            all_tracks = stitch_for(all_tracks, stitch, data.get("fps", 30.0))
         self.tracks = [t for t in all_tracks if len(t.frames) >= min_frames]
         self.match = [match_fraction(t, labels) for t in self.tracks]
         self.labels = labels
@@ -57,10 +61,10 @@ class Clip:
         return np.array([m >= MIN_MATCH_FRACTION for m in self.match], dtype=int)
 
 
-def load_clips(min_frames: int) -> list[Clip]:
-    """Every cached delivery with at least one usable track."""
+def load_clips(min_frames: int, stitch: DetectSettings | None = None) -> list[Clip]:
+    """Every cached delivery with at least one usable track (stitched like the app does)."""
     clips = [
-        Clip(json.loads(p.read_text(encoding="utf-8")), min_frames)
+        Clip(json.loads(p.read_text(encoding="utf-8")), min_frames, stitch)
         for p in sorted(TRACK_CACHE.glob("*.json"))
     ]
     return [c for c in clips if c.tracks]
@@ -110,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     s = load_settings()
     min_frames = s.detect.min_track_frames
-    clips = load_clips(min_frames)
+    clips = load_clips(min_frames, s.detect)
     train = [c for c in clips if c.split == "train" and c.has_bowler]
     test = [c for c in clips if c.split == "test"]
     test_trackable = [c for c in test if c.has_bowler]

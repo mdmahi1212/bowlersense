@@ -67,6 +67,10 @@ class VideoSettings(_Section):
     min_mean_keypoint_conf: float = Field(ge=0, le=1)
     front_view_width_ratio: float = Field(gt=0)
     approach_size_change: float = Field(gt=0)
+    slowmo_expected_arm_dps: float = Field(gt=0)
+    slowmo_expected_wrist_hps: float = Field(gt=0)
+    slowmo_min_factor: float = Field(gt=1)
+    slowmo_factors: tuple[float, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _fps_order(self) -> VideoSettings:
@@ -83,6 +87,12 @@ class DetectSettings(_Section):
     tracker: str = Field(min_length=1)
     min_track_frames: int = Field(ge=1)
     selector_model: str = Field(min_length=1)
+    stitch_max_gap_s: float = Field(ge=0)
+    stitch_max_jump: float = Field(gt=0)
+    stitch_max_size_ratio: float = Field(gt=1)
+    colour_window_s: float = Field(gt=0)
+    colour_split_threshold: float = Field(gt=0, le=1)
+    colour_join_threshold: float = Field(gt=0, le=1)
 
 
 class PoseSettings(_Section):
@@ -147,6 +157,7 @@ class LegalitySettings(_Section):
     screen_views: tuple[Literal["side", "front", "behind", "unknown"], ...] = Field(min_length=1)
     screen_min_phase_confidence: float = Field(ge=0, le=1)
     screen_max_window_s: float = Field(gt=0)
+    fallback_window_s: float = Field(gt=0)
     screen_max_plausible_deg: float = Field(gt=0)
 
 

@@ -36,6 +36,7 @@ from bowlsense.geometry.body import (
 )
 from bowlsense.geometry.pitch import PitchCalibration
 from bowlsense.io.quality import check_pose, check_video, estimate_view
+from bowlsense.io.slowmo import SlowMotion, estimate_slowmo, retime
 from bowlsense.io.video import VideoInfo, iter_frames, probe_video
 from bowlsense.phases.heuristic import detect_phases
 from bowlsense.phases.model import load_phase_model
@@ -54,8 +55,11 @@ from bowlsense.schemas import (
     DeliveryTypeResult,
     FatigueResult,
     FramePose,
+    PeopleTracks,
     PoseSequence,
     SessionResult,
+    TrackedPerson,
+    View,
     WorkloadResult,
 )
 
@@ -73,6 +77,8 @@ class FrontEndResult(BaseModel):
     warnings: list[str]
     bowler_track_id: int | None
     backend: str
+    video_fps: float = 0.0  # the file's own (playback) frame rate
+    slow_motion: SlowMotion = SlowMotion(factor=1.0, source="none")
 
 
 def _visible_frames(seq: PoseSequence) -> int:
@@ -88,7 +94,8 @@ def _pose_from_json(path: Path, info: VideoInfo) -> PoseSequence:
             f"Pose JSON is for a {seq.width}x{seq.height} video but {Path(info.path).name} is "
             f"{info.width}x{info.height}."
         )
-    if abs(seq.fps - info.fps) > 0.5:
+    ratio = seq.fps / info.fps
+    if abs(seq.fps - info.fps) > 0.5 and not (ratio > 1.5 and abs(ratio - round(ratio)) < 0.05):
         raise InvalidInputError(
             f"Pose JSON is at {seq.fps:g} fps but the video is {info.fps:g} fps."
         )
@@ -127,23 +134,40 @@ def extract_pose(
     bowler_track_id: int | None = None,
     pose_json: Path | None = None,
     bowling_arm: Arm | None = None,
+    people_out: Path | None = None,
+    slow_motion: float | None = 1.0,
+    camera_view: View | None = None,
 ) -> FrontEndResult:
     """Video -> the bowler's pose sequence with view and bowling arm set.
 
     With ``pose_json`` the keypoints come from that file (a saved ``PoseSequence``) instead
     of the detector and pose model; the video is still checked. ``bowling_arm`` (from the
     bowler's profile) skips arm detection. With ``pose.lift_3d`` on, MotionBERT fills ``z``.
+    ``people_out`` receives every tracked person (``PeopleTracks``) as soon as tracking is
+    done, so the user can pick the right bowler even if a later step fails.
+
+    ``slow_motion`` is how many times the clip is slowed down (1 = real time, ``None`` =
+    detect it). The returned sequence and ``video.fps`` are on the real-time base
+    (file fps x factor); ``video_fps`` keeps the file's own rate for playback.
+    ``camera_view`` (from the user) replaces the estimated camera view.
     """
     info = probe_video(video)
-    warnings = check_video(info, settings.video, allow_low_fps)
+    file_fps = info.fps
+    if slow_motion is not None:  # known factor: fail fast on a clip that is too slow anyway
+        check_video(info.model_copy(update={"fps": file_fps * slow_motion}), settings.video,
+                    allow_low_fps)  # fmt: skip
+    saved_factor: float | None = None
     track_id: int | None = None
     used_backend = "pose-json"
     if pose_json is not None:
         seq = _pose_from_json(pose_json, info)
+        if seq.fps > file_fps * 1.5:  # a saved pose already on a slow-motion time base
+            saved_factor = seq.fps / file_fps
+            seq = retime(seq, 1.0 / saved_factor)
     else:
         name = backend or settings.pose.backend
         models = settings.storage.models_path
-        tracks = track_people_in_video(video, models, settings.detect)
+        tracks = track_people_in_video(video, models, settings.detect, info.fps)
         selector_file = models / settings.detect.selector_model
         scorer = load_selector(selector_file) if selector_file.is_file() else None
         bowler = select_bowler(
@@ -151,6 +175,19 @@ def extract_pose(
             scorer=scorer, frame_height=info.height, n_frames=info.frame_count,
         )  # fmt: skip
         track_id, used_backend = bowler.track_id, name
+        if people_out is not None:
+            people = PeopleTracks(
+                width=info.width, height=info.height, fps=info.fps,
+                frame_count=info.frame_count, chosen_track_id=bowler.track_id,
+                chosen_by="user" if bowler_track_id is not None else "auto",
+                people=[
+                    TrackedPerson(track_id=t.track_id, frames=t.frames,
+                                  boxes=[tuple(round(v, 1) for v in b) for b in t.boxes])
+                    for t in tracks if len(t.frames) >= settings.detect.min_track_frames
+                ],
+            )  # fmt: skip
+            people_out.parent.mkdir(parents=True, exist_ok=True)
+            people_out.write_text(people.model_dump_json(), encoding="utf-8")
         pose = load_backend(name, settings.pose, models)
         empty = dict.fromkeys(KEYPOINT_NAMES)
         frames: list[FramePose] = []
@@ -162,13 +199,36 @@ def extract_pose(
             raise InvalidInputError(f"No frames could be decoded from {video.name}.")
         seq = PoseSequence(fps=info.fps, width=info.width, height=info.height, frames=frames)
 
+    if saved_factor is not None:
+        slowmo = SlowMotion(factor=saved_factor, source="user" if slow_motion else "auto")
+    elif slow_motion is None:
+        rough = clean_sequence(seq, settings.pose)
+        rough = rough.model_copy(
+            update={"bowling_arm": choose_bowling_arm(rough, settings, bowling_arm).arm}
+        )
+        slowmo = estimate_slowmo(rough, settings)
+    elif slow_motion != 1.0:
+        slowmo = SlowMotion(factor=float(slow_motion), source="user")
+    else:
+        slowmo = SlowMotion(factor=1.0, source="none")
+    seq = retime(seq, slowmo.factor)
+    info = info.model_copy(update={"fps": file_fps * slowmo.factor})
+    warnings = check_video(info, settings.video, allow_low_fps)
+    if slowmo.factor != 1.0:
+        how = "detected" if slowmo.source == "auto" else "set"
+        warnings.insert(
+            0,
+            f"Slow-motion video ({how} about {slowmo.factor:g}x): analysed at the real-time "
+            f"rate of {info.fps:.0f} fps (the file is {file_fps:.0f} fps)."
+            + (" The factor is estimated, so speeds are approximate." if how == "detected" else ""),
+        )
     cleaned = clean_sequence(seq, settings.pose)
     arm_result = choose_bowling_arm(cleaned, settings, bowling_arm)
     arm = arm_result.arm
     cleaned = cleaned.model_copy(update={"bowling_arm": arm})
     first_release = find_releases(cleaned, settings.clipping)[0]
     window = runup_window(cleaned, settings.body, release=first_release)
-    view = estimate_view(cleaned, window, settings.video)
+    view = camera_view or estimate_view(cleaned, window, settings.video)
     warnings += check_pose(seq, _visible_frames(seq), settings.video)
     log.info("front end: %s arm (%s), %s view, %d warning(s)", arm, arm_result.method, view,
              len(warnings))  # fmt: skip
@@ -186,6 +246,8 @@ def extract_pose(
         warnings=warnings,
         bowler_track_id=track_id,
         backend=used_backend,
+        video_fps=file_fps,
+        slow_motion=slowmo,
     )
 
 
@@ -345,6 +407,8 @@ class PipelineOptions(BaseModel):
     bowling_arm: Arm | None = None
     calibration_points: list[list[float]] | None = None
     use_llm: bool = True
+    slow_motion: float | None = None  # slow-down factor; None = detect, 1 = real time
+    camera_view: View | None = None  # None = estimate it
     recorded_on: date | None = None
     workload_history: list[tuple[date, int]] | None = None  # None: no bowler profile
 
@@ -450,7 +514,8 @@ def run_pipeline(
     front = extract_pose(
         video, settings, backend=opts.backend, allow_low_fps=opts.allow_low_fps,
         bowler_track_id=opts.bowler_track_id, pose_json=opts.pose_json,
-        bowling_arm=opts.bowling_arm,
+        bowling_arm=opts.bowling_arm, people_out=out_dir / "people.json",
+        slow_motion=opts.slow_motion, camera_view=opts.camera_view,
     )  # fmt: skip
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "pose.json").write_text(front.sequence.model_dump_json(), encoding="utf-8")
@@ -526,6 +591,9 @@ def run_pipeline(
         bowling_arm=seq.bowling_arm,
         pose_backend=front.backend,
         bowler_track_id=front.bowler_track_id,
+        video_fps=front.video_fps or front.video.fps,
+        slow_motion_factor=front.slow_motion.factor,
+        slow_motion_source=front.slow_motion.source,
         consistency=session.consistency,
         coach_source=coach.source,
         coach_note=coach.note,

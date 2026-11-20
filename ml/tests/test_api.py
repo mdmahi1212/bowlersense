@@ -16,6 +16,7 @@ from bowlsense.api import create_app
 from bowlsense.config import Settings, load_settings
 from bowlsense.db.repo import Repository
 from bowlsense.db.session import get_engine
+from bowlsense.local_settings import LocalSettings
 from bowlsense.storage import LocalStorage
 from bowlsense.worker import Worker
 from synth.skeleton_gen import SynthParams, generate, render_to_video
@@ -402,3 +403,39 @@ def test_worker_survives_session_deleted_mid_job(
     monkeypatch.setattr(env.worker, "run_once", boom)
     env.worker.run_forever(stop)  # keeps polling after an unexpected error
     assert len(calls) == 2
+
+
+def test_pick_the_bowler(env: Env, clip: tuple[bytes, bytes]) -> None:
+    from bowlsense.schemas import PeopleTracks, TrackedPerson
+
+    session = env.upload(clip)["session"]
+    assert isinstance(session, dict)
+    sid = session["id"]
+    busy = env.client.post(f"/sessions/{sid}/bowler", json={"track_id": 2})
+    assert busy.status_code == 409  # still queued
+    assert env.worker.run_once()
+    assert env.client.get(f"/sessions/{sid}/people").status_code == 404  # keypoints imported
+    people = PeopleTracks(
+        width=640, height=360, fps=120.0, frame_count=3, chosen_track_id=1, chosen_by="auto",
+        people=[TrackedPerson(track_id=t, frames=[0, 1, 2], boxes=[(0, 0, 10, 20)] * 3)
+                for t in (1, 2)],
+    )  # fmt: skip
+    (env.storage.root / "outputs" / sid / "people.json").write_text(people.model_dump_json())
+    got = env.client.get(f"/sessions/{sid}/people").json()
+    assert got["chosen_track_id"] == 1 and [p["track_id"] for p in got["people"]] == [1, 2]
+    assert env.client.post(f"/sessions/{sid}/bowler", json={"track_id": 7}).status_code == 422
+    r = env.client.post(f"/sessions/{sid}/bowler", json={"track_id": 2})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["session"]["status"] == "queued"
+    assert body["session"]["options"]["bowler_track_id"] == 2
+    assert "reuse_pose" not in body["session"]["options"]
+    job = env.repo.claim_next_job()
+    assert job is not None
+    assert env.worker.options_for(job, load_local_settings_for(env)).bowler_track_id == 2
+
+
+def load_local_settings_for(env: Env) -> LocalSettings:
+    from bowlsense.local_settings import load_local_settings
+
+    return load_local_settings(env.settings)

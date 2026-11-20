@@ -425,3 +425,41 @@ def test_real_clip_end_to_end(clip: Path, tmp_path: Path) -> None:
     assert code == 0
     result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
     assert result["deliveries"][0]["phases"]["release"] > 0
+
+
+def test_people_saved_and_user_choice_used(
+    synth_clip: tuple[Path, Path, SynthResult], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Every tracked person is written to people.json; a chosen track id is analysed and
+    recorded as the user's choice."""
+    from bowlsense.schemas import PeopleTracks
+
+    video, _, r = synth_clip
+    s = _settings()
+    n = len(r.sequence.frames)
+    boxes = []
+    for f in r.sequence.frames:
+        xs = [kp.x for kp in f.keypoints.values() if kp is not None]
+        ys = [kp.y for kp in f.keypoints.values() if kp is not None]
+        boxes.append((min(xs), min(ys), max(xs), max(ys)))
+    bowler = PersonTrack(track_id=4, frames=list(range(n)), boxes=boxes, confs=[0.9] * n)
+    umpire = PersonTrack(track_id=9, frames=list(range(n)), confs=[0.9] * n,
+                         boxes=[(10.0, 10.0, 60.0, 150.0)] * n)  # fmt: skip
+    monkeypatch.setattr(
+        "bowlsense.pipeline.track_people_in_video", lambda *a, **k: [umpire, bowler]
+    )
+
+    class Truth:
+        name = "truth"
+
+        def estimate(self, frame: np.ndarray, bbox: object) -> KeypointMap:
+            i = next(j for j, b in enumerate(boxes) if b == bbox) if bbox in boxes else 0
+            return dict(r.sequence.frames[i].keypoints)
+
+    monkeypatch.setattr("bowlsense.pipeline.load_backend", lambda *a, **k: Truth())
+    out = tmp_path / "people.json"
+    front = extract_pose(video, s, bowler_track_id=4, people_out=out)
+    people = PeopleTracks.model_validate_json(out.read_text(encoding="utf-8"))
+    assert front.bowler_track_id == 4 and people.chosen_track_id == 4
+    assert people.chosen_by == "user" and {p.track_id for p in people.people} == {4, 9}
+    assert people.width == r.sequence.width and people.frame_count == n

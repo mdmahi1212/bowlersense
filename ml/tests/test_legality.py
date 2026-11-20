@@ -244,7 +244,26 @@ def test_untrustworthy_clips_are_not_screened() -> None:
     leg = s.legality
     check(seq, r.phases, leg.model_copy(update={"screen_min_fps": 200.0}), "fps")
     check(seq.model_copy(update={"view": "front"}), r.phases, leg, "side-on")
-    check(seq, r.phases.model_copy(update={"confidence": 0.2}), leg, "phases couldn't")
-    early = r.phases.model_copy(update={"arm_horizontal": r.phases.release - 60})
-    check(seq, early, leg, "spans")
+    stride_after = r.phases.model_copy(update={"bfc": r.phases.release + 1, "confidence": 0.2})
+    check(seq, stride_after, leg, "after the delivery stride")
+    # an impossible arm-horizontal falls back to the last 80 ms before release (low confidence)
+    early = r.phases.model_copy(update={"arm_horizontal": r.phases.bfc - 30, "confidence": 0.2})
+    res = assess_legality(seq, early, leg)
+    assert res.screened and res.confidence == "low" and "last 80 ms" in res.note
+    assert res.verdict == "not_legal" and res.elbow_extension_deg > 15.0
     check(seq, r.phases, leg.model_copy(update={"screen_max_plausible_deg": 10.0}), "beyond")
+
+
+def test_verdict_legal_not_legal_cannot_judge() -> None:
+    s = load_settings()
+    for ext, verdict in ((8.0, "legal"), (22.0, "not_legal")):
+        r = generate(SynthParams(elbow_extension_deg=ext, fps=120.0))
+        res = assess_legality(clean_sequence(r.sequence, s.pose), r.phases, s.legality)
+        assert res.verdict == verdict
+        word = "Legal:" if verdict == "legal" else "Not legal:"
+        assert res.verdict_text.startswith(word) and "15 deg limit" in res.verdict_text
+    r = generate(SynthParams(elbow_extension_deg=22.0, fps=120.0))
+    seq = clean_sequence(r.sequence, s.pose).model_copy(update={"view": "front"})
+    res = assess_legality(seq, r.phases, s.legality)
+    assert res.verdict == "cannot_judge" and res.verdict_text.startswith("Can't judge")
+    assert not res.flagged

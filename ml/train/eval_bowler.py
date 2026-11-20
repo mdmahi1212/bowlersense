@@ -33,6 +33,7 @@ from bowlsense.detect.person import (
     PersonTrack,
     model_path,
     select_bowler,
+    stitch_for,
     track_motion,
     track_people,
 )
@@ -119,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
                 "labels": {str(k): v for k, v in labels.items()},
                 "tracks": [t.model_dump() for t in tracks],
             }), encoding="utf-8")  # fmt: skip
+        tracks = stitch_for(tracks, s.detect, info.fps)  # as the app does
         row: dict[str, Any] = {
             "video": d.video, "release": d.release, "camera_angle": d.camera_angle,
             "direction": d.bowl_direction, "tracks": len(tracks),

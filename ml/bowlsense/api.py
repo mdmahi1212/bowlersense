@@ -46,7 +46,13 @@ from bowlsense.local_settings import (
     load_local_settings,
     save_local_settings,
 )
-from bowlsense.schemas import SKELETON_EDGES, DeliveryMetrics, SessionResult, WorkloadResult
+from bowlsense.schemas import (
+    SKELETON_EDGES,
+    DeliveryMetrics,
+    PeopleTracks,
+    SessionResult,
+    WorkloadResult,
+)
 from bowlsense.storage import OUTPUTS_DIR, LocalStorage, PathTraversalError, UploadTooLargeError
 from bowlsense.worker import pose_upload_path
 
@@ -84,6 +90,12 @@ class CalibrationIn(BaseModel):
     rerun: bool = True
 
 
+class BowlerChoiceIn(BaseModel):
+    """The tracked person to analyse as the bowler."""
+
+    track_id: int = Field(ge=0)
+
+
 class CoachIn(BaseModel):
     """A chat message to the coach."""
 
@@ -109,7 +121,8 @@ class DeliveryOut(BaseModel):
 
     delivery_id: str
     session_id: str
-    fps: float
+    fps: float  # the video file's playback rate (for the player)
+    analysis_fps: float  # the real-time rate the analysis used (differs for slow motion)
     width: int
     height: int
     bowling_arm: Literal["right", "left"]
@@ -348,6 +361,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bowling_arm: Annotated[Literal["right", "left"] | None, Form()] = None,
         allow_low_fps: Annotated[bool, Form()] = False,
         bowler_track_id: Annotated[int | None, Form()] = None,
+        slow_motion: Annotated[float | None, Form(gt=0, le=64)] = None,
+        camera_view: Annotated[Literal["side", "front", "behind"] | None, Form()] = None,
         recorded_at: Annotated[datetime | None, Form()] = None,
         pose_file: Annotated[
             UploadFile | None, File(description="optional PoseSequence JSON")
@@ -371,7 +386,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 state.storage.resolve(saved).replace(target)
             options = {"allow_low_fps": allow_low_fps, "bowler_track_id": bowler_track_id,
-                       "bowling_arm": bowling_arm}  # fmt: skip
+                       "bowling_arm": bowling_arm, "slow_motion": slow_motion,
+                       "camera_view": camera_view}  # fmt: skip
             session = state.repo.create_session(
                 rel, bowler_id=bowler_id or None, recorded_at=recorded_at,
                 options=options, original_name=name,
@@ -451,6 +467,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             state.repo.create_job(session_id)
         return session_out(session_id)
 
+    def load_people(session_id: str) -> PeopleTracks:
+        path = state.output_dir(session_id) / "people.json"
+        if not path.is_file():
+            raise HTTPException(
+                404,
+                "No tracked people for this session yet (still queued, or the keypoints were "
+                "imported instead of detected).",
+            )
+        return PeopleTracks.model_validate_json(path.read_text(encoding="utf-8"))
+
+    @app.get("/sessions/{session_id}/people")
+    def session_people(session_id: str) -> PeopleTracks:
+        """Everyone the tracker followed, and which one was analysed as the bowler."""
+        state.repo.get_session(session_id)
+        return load_people(session_id)
+
+    @app.post("/sessions/{session_id}/bowler")
+    def choose_bowler(session_id: str, body: BowlerChoiceIn) -> SessionOut:
+        """Analyse a different tracked person as the bowler (re-runs the session)."""
+        session = state.repo.get_session(session_id)
+        if session.status in ("queued", "processing"):
+            raise HTTPException(409, "The session is still being analysed; try again when done.")
+        people = load_people(session_id)
+        if body.track_id not in {p.track_id for p in people.people}:
+            raise HTTPException(422, f"Track {body.track_id} isn't one of this video's people.")
+        options = {**(session.options or {}), "bowler_track_id": body.track_id}
+        options.pop("reuse_pose", None)  # new person: pose must be estimated again
+        state.repo.set_session_options(session_id, options)
+        state.repo.set_session_status(session_id, "queued")
+        state.repo.create_job(session_id)
+        return session_out(session_id)
+
     @app.get("/sessions/{session_id}/report.pdf")
     def session_pdf(session_id: str) -> FileResponse:
         """The PDF report."""
@@ -495,7 +543,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result is None or ref.idx >= len(result.deliveries):
             raise HTTPException(404, "The delivery's results are missing.")
         return DeliveryOut(
-            delivery_id=delivery_id, session_id=ref.session_id, fps=result.fps,
+            delivery_id=delivery_id, session_id=ref.session_id,
+            fps=result.video_fps or result.fps, analysis_fps=result.fps,
             width=result.width, height=result.height, bowling_arm=result.bowling_arm,
             view=result.view, overlay=result.artifacts["overlay"], pose=result.artifacts["pose"],
             delivery_count=len(result.deliveries), delivery=result.deliveries[ref.idx],
@@ -581,5 +630,6 @@ API_MODELS: tuple[type[BaseModel], ...] = (
     BowlerIn, BowlerRecord, SessionRecord, JobRecord, SessionOut, CalibrationIn, CoachIn,
     CoachOut, ChatTurn, ConfirmIn, SettingsOut, LocalSettings, WorkloadPoint, WorkloadOut,
     ReferencesOut, ReferenceAction, Drill, DeliveryOut, ImageAnalysis, ImageCheck,
+    BowlerChoiceIn,
 )  # fmt: skip
 """Request/response bodies exported (with ``schemas.EXPORTED_MODELS``) for the web types."""

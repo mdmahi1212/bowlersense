@@ -7,6 +7,7 @@ always says so.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -141,6 +142,17 @@ def front_foot_no_ball(
     return not behind
 
 
+def _arm_horizontal_plausible(
+    seq: PoseSequence, phases: PhaseEvents, settings: LegalitySettings
+) -> bool:
+    """AH must fall inside the delivery stride (after back-foot contact, before release)
+    and no more than ``screen_max_window_s`` before release."""
+    window_s = (phases.release - phases.arm_horizontal) / seq.fps
+    return phases.bfc <= phases.arm_horizontal < phases.release and (
+        window_s <= settings.screen_max_window_s
+    )
+
+
 def screening_problems(
     seq: PoseSequence, phases: PhaseEvents, extension: float, settings: LegalitySettings
 ) -> list[str]:
@@ -153,20 +165,37 @@ def screening_problems(
         )
     if seq.view not in settings.screen_views:
         problems.append(f"the camera is {seq.view}-on; elbow angles need a side-on camera")
-    if phases.confidence < settings.screen_min_phase_confidence:
+    if not phases.bfc < phases.release or phases.release <= 0:
+        problems.append("the release couldn't be placed after the delivery stride")
+    elif phases.confidence < settings.screen_min_phase_confidence and not (
+        phases.bfc <= phases.ffc <= phases.release
+    ):
         problems.append("the delivery phases couldn't be found reliably")
-    window_s = (phases.release - phases.arm_horizontal) / seq.fps
-    if window_s > settings.screen_max_window_s:
-        problems.append(
-            f"arm-horizontal to release spans {window_s:.2f} s (real deliveries take about "
-            "0.1 s), so the phases are wrong"
-        )
     if extension > settings.screen_max_plausible_deg:
         problems.append(
             f"the measured {extension:.0f} deg is beyond what an elbow can straighten, so the "
             "arm wasn't tracked correctly"
         )
     return problems
+
+
+def legality_verdict(
+    extension: float, limit: float, flagged: bool, screened: bool
+) -> tuple[Literal["legal", "not_legal", "cannot_judge"], str]:
+    """The plain-language verdict for one delivery (2D screening, not the ICC test)."""
+    if not screened:
+        return "cannot_judge", (
+            "Can't judge: this video can't measure the elbow reliably. Film side-on at 60+ fps "
+            "(120+ is best)."
+        )
+    if flagged:
+        return "not_legal", (
+            f"Not legal: the elbow straightened {extension:.1f} deg, more than the {limit:.0f} deg "
+            "limit."
+        )
+    return "legal", (
+        f"Legal: the elbow straightened {extension:.1f} deg, within the {limit:.0f} deg limit."
+    )
 
 
 def assess_legality(
@@ -188,10 +217,20 @@ def assess_legality(
     not screened (never flagged); see ``screening_problems``.
     """
     angles = elbow_angles(raw if raw is not None else seq)
+    estimated_ah = not _arm_horizontal_plausible(seq, phases, settings)
+    if estimated_ah:  # use a fixed window before release instead of an impossible AH
+        ah = max(0, phases.release - max(2, round(settings.fallback_window_s * seq.fps)))
+        phases = phases.model_copy(update={"arm_horizontal": ah})
     fitted = fitted_elbow_angles(angles, phases.arm_horizontal, phases.release, seq.fps, settings)
     extension = elbow_extension(fitted, phases.arm_horizontal, phases.release)
     confidence = _confidence(seq, phases, settings)
     note = "2D video screening only. The official ICC test uses 3D motion capture."
+    if estimated_ah:
+        confidence = "low"
+        note += (
+            f" Arm-horizontal couldn't be found reliably, so the elbow was measured over the "
+            f"last {settings.fallback_window_s * 1000:.0f} ms before release."
+        )
     if seq.view not in ("side", "unknown"):
         confidence = "low"
         note += " Elbow angles are only reliable from a side-on camera."
@@ -201,11 +240,16 @@ def assess_legality(
         reason = "Not screened: " + "; ".join(problems) + "."
         note += " " + reason
         confidence = "low"
+    limit = settings.elbow_extension_threshold_deg
+    flagged = not problems and extension > limit
+    verdict, verdict_text = legality_verdict(extension, limit, flagged, not problems)
     return LegalityResult(
         elbow_extension_deg=extension,
-        threshold_deg=settings.elbow_extension_threshold_deg,
-        flagged=not problems and extension > settings.elbow_extension_threshold_deg,
+        threshold_deg=limit,
+        flagged=flagged,
         screened=not problems,
+        verdict=verdict,
+        verdict_text=verdict_text,
         not_screened_reason=reason,
         confidence=confidence,
         note=note,

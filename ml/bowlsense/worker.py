@@ -68,6 +68,8 @@ class Worker:
             bowling_arm=bowling_arm,
             calibration_points=session.calibration,
             use_llm=local.use_llm,
+            slow_motion=opts.get("slow_motion"),
+            camera_view=opts.get("camera_view"),
             recorded_on=recorded,
             workload_history=history,
         )

@@ -156,18 +156,19 @@ def template_report(summary: CoachSummary) -> str:
         lines += ["", "No technique faults were found in the checks this camera view allows. "
                       "Keep doing what you're doing."]  # fmt: skip
     lines.append("")
+    legal = s.legality_screened - s.legality_flagged
+    unjudged = s.deliveries - s.legality_screened
     if not s.legality_screened:
-        lines.append(f"Elbow: not screened. {s.legality_note}")
-    elif s.legality_flagged:
-        lines.append(
-            f"Elbow: {s.legality_flagged} deliver{'y' if s.legality_flagged == 1 else 'ies'} "
-            f"showed more than {s.legality_threshold_deg:.0f} deg of elbow straightening "
-            f"(most {s.legality_max_extension_deg:.1f} deg). {s.legality_note}"
-        )
+        lines.append(f"Legality: CAN'T JUDGE. {s.legality_note}")
     else:
+        verdict = "NOT LEGAL" if s.legality_flagged else "LEGAL"
+        parts = [f"{legal} legal", f"{s.legality_flagged} not legal"]
+        if unjudged:
+            parts.append(f"{unjudged} can't judge")
         lines.append(
-            f"Elbow: every screened delivery stayed within {s.legality_threshold_deg:.0f} deg "
-            f"(most {s.legality_max_extension_deg:.1f} deg). {s.legality_note}"
+            f"Legality: {verdict} ({', '.join(parts)}; elbow limit "
+            f"{s.legality_threshold_deg:.0f} deg, most {s.legality_max_extension_deg:.1f} deg). "
+            "2D video screening only; the official ICC test uses 3D motion capture."
         )
     drivers = "; ".join(s.injury_top_drivers[:3]) or "none elevated"
     lines.append(

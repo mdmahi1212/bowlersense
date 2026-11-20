@@ -190,11 +190,11 @@ def build_report(data: ReportInput, path: Path, chart_dir: Path, threshold_deg: 
                 f"{a.faults.technique_score:.0f} / 100",
                 f"{a.injury.overall:.0f} ({a.injury.band})",
                 (
-                    f"{leg.elbow_extension_deg:.1f} deg extension "
-                    f"({'FLAGGED' if leg.flagged else 'within'} {leg.threshold_deg:.0f} deg; "
+                    f"{'NOT LEGAL' if leg.flagged else 'LEGAL'}: "
+                    f"{leg.elbow_extension_deg:.1f} deg (limit {leg.threshold_deg:.0f}; "
                     f"{leg.confidence} confidence)"
                     if leg.screened
-                    else "not screened (see note)"
+                    else "CAN'T JUDGE (see note)"
                 ),
                 a.alignment.action_type.replace("_", " "),
                 _ball_text(a),

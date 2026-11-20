@@ -102,6 +102,7 @@ def test_template_report_is_complete() -> None:
     assert "Drill:" in text and "against a limit of 20" in text
     assert "2D video screening only" in text and "not medical advice" in text
     assert "Injury-risk screening" in text
+    assert "Legality: NOT LEGAL (2 legal, 1 not legal;" in text
 
 
 def test_template_report_without_faults() -> None:
@@ -277,4 +278,4 @@ def test_template_says_not_screened_instead_of_within_limit() -> None:
         update={"legality_screened": 0, "legality_flagged": 0, "legality_note": "Not screened: x."}
     )
     text = template_report(s)
-    assert "Elbow: not screened. Not screened: x." in text and "stayed within" not in text
+    assert "Legality: CAN'T JUDGE. Not screened: x." in text and "LEGAL (" not in text

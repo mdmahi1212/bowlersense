@@ -12,6 +12,7 @@ import type {
   ImageAnalysis,
   Drill,
   LocalSettings,
+  PeopleTracks,
   ReferencesOut,
   SessionOut,
   SessionRecord,
@@ -131,6 +132,12 @@ export const api = {
       method: "POST",
       ...json({ message }),
     }),
+  people: (id: string) => request<PeopleTracks>(`/sessions/${encodeURIComponent(id)}/people`),
+  chooseBowler: (id: string, trackId: number) =>
+    request<SessionOut>(`/sessions/${encodeURIComponent(id)}/bowler`, {
+      method: "POST",
+      ...json({ track_id: trackId }),
+    }),
   delivery: (id: string) => request<DeliveryOut>(`/deliveries/${encodeURIComponent(id)}`),
   drills: () => request<Record<string, Drill[]>>("/drills"),
   references: () => request<ReferencesOut>("/references"),
@@ -146,6 +153,9 @@ export interface UploadFields {
   bowlerId?: string;
   bowlingArm?: "right" | "left";
   allowLowFps?: boolean;
+  /** Times slowed down; undefined = detect it, 1 = real time. */
+  slowMotion?: number;
+  cameraView?: "side" | "front" | "behind";
 }
 
 /** Multipart upload with progress (XHR, since fetch has no upload progress). */
@@ -160,6 +170,8 @@ export function uploadSession(
   if (fields.bowlerId) form.append("bowler_id", fields.bowlerId);
   if (fields.bowlingArm) form.append("bowling_arm", fields.bowlingArm);
   if (fields.allowLowFps) form.append("allow_low_fps", "true");
+  if (fields.slowMotion) form.append("slow_motion", String(fields.slowMotion));
+  if (fields.cameraView) form.append("camera_view", fields.cameraView);
   const promise = new Promise<SessionOut>((resolve, reject) => {
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);

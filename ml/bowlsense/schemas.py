@@ -240,6 +240,10 @@ class InjuryFeatures(_Model):
 class LegalityResult(_Model):
     """Elbow-extension screening result.
 
+    ``verdict`` is the plain answer shown to the user: ``legal`` (elbow straightened no more
+    than the threshold), ``not_legal`` (more than the threshold) or ``cannot_judge`` (the clip
+    can't support a measurement; see ``not_screened_reason``). ``verdict_text`` says it in words.
+
     ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
     camera view, phase events out of order, implausible value); then ``flagged`` is always
     False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
@@ -250,6 +254,8 @@ class LegalityResult(_Model):
     flagged: bool
     screened: bool = True
     not_screened_reason: str | None = None
+    verdict: Literal["legal", "not_legal", "cannot_judge"] = "legal"
+    verdict_text: str = ""
     confidence: Confidence
     note: str = "2D video screening only. The official ICC test uses 3D motion capture."
     front_foot_no_ball: bool | None = None
@@ -431,9 +437,32 @@ class SessionResult(_Model):
     bowling_arm: Arm
     pose_backend: str = ""
     bowler_track_id: int | None = None
+    video_fps: float = 0.0  # the file's playback rate (``fps`` is the real-time rate)
+    slow_motion_factor: float = 1.0
+    slow_motion_source: Literal["none", "auto", "user"] = "none"
     consistency: ConsistencyResult | None = None
     coach_source: Literal["ollama", "template"] = "template"
     coach_note: str = ""
+
+
+class TrackedPerson(_Model):
+    """One person the tracker followed: their box (x1, y1, x2, y2) in each frame seen."""
+
+    track_id: int
+    frames: list[int]
+    boxes: list[tuple[float, float, float, float]]
+
+
+class PeopleTracks(_Model):
+    """Everyone tracked in a session's video, and which one was analysed as the bowler."""
+
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    fps: float = Field(gt=0)
+    frame_count: int = Field(ge=0)
+    chosen_track_id: int | None
+    chosen_by: Literal["auto", "user"]
+    people: list[TrackedPerson]
 
 
 EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
@@ -461,6 +490,8 @@ EXPORTED_MODELS: tuple[type[BaseModel], ...] = (
     FatigueResult,
     WorkloadResult,
     SessionResult,
+    TrackedPerson,
+    PeopleTracks,
 )
 
 

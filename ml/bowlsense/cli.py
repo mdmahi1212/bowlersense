@@ -46,6 +46,16 @@ def _parser() -> argparse.ArgumentParser:
         "speed, length and line",
     )
     a.add_argument(
+        "--slow-motion",
+        type=float,
+        help="how many times the clip is slowed down (1 = real time; default: detect it)",
+    )
+    a.add_argument(
+        "--view",
+        choices=["side", "front", "behind"],
+        help="camera view (default: estimate it)",
+    )
+    a.add_argument(
         "--no-llm", action="store_true", help="skip the local Ollama coach; use the template report"
     )
     a.add_argument("--config", type=Path, help="config YAML (default: config/default.yaml)")
@@ -80,6 +90,8 @@ def analyze(args: argparse.Namespace) -> int:
         bowling_arm=args.bowling_arm,
         calibration_points=points,
         use_llm=not args.no_llm,
+        slow_motion=args.slow_motion,
+        camera_view=args.view,
     )
     out: Path = args.out
     result = run_pipeline(args.video, out, settings, session_id=out.name, options=options)

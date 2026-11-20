@@ -5,6 +5,7 @@ export interface BowlSense {
   AngleSeries?: AngleSeries;
   BallMetrics?: BallMetrics;
   BallTrack?: BallTrack;
+  BowlerChoiceIn?: BowlerChoiceIn;
   BowlerIn?: BowlerIn;
   BowlerRecord?: BowlerRecord;
   CalibrationIn?: CalibrationIn;
@@ -32,6 +33,7 @@ export interface BowlSense {
   Keypoint?: Keypoint;
   LegalityResult?: LegalityResult;
   LocalSettings?: LocalSettings;
+  PeopleTracks?: PeopleTracks;
   PhaseEvents?: PhaseEvents;
   PoseSequence?: PoseSequence;
   ReferenceAction?: ReferenceAction;
@@ -42,6 +44,7 @@ export interface BowlSense {
   SessionRecord?: SessionRecord;
   SessionResult?: SessionResult;
   SettingsOut?: SettingsOut;
+  TrackedPerson?: TrackedPerson;
   WorkloadOut?: WorkloadOut;
   WorkloadPoint?: WorkloadPoint;
   WorkloadResult?: WorkloadResult;
@@ -102,6 +105,15 @@ export interface BallTrack {
   points: [number, number, number, number][];
   release_frame: number | null;
   bounce_frame: number | null;
+}
+/**
+ * The tracked person to analyse as the bowler.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "BowlerChoiceIn".
+ */
+export interface BowlerChoiceIn {
+  track_id: number;
 }
 /**
  * New bowler profile.
@@ -236,6 +248,10 @@ export interface PhaseEvents {
 /**
  * Elbow-extension screening result.
  *
+ * ``verdict`` is the plain answer shown to the user: ``legal`` (elbow straightened no more
+ * than the threshold), ``not_legal`` (more than the threshold) or ``cannot_judge`` (the clip
+ * can't support a measurement; see ``not_screened_reason``). ``verdict_text`` says it in words.
+ *
  * ``screened`` is False when the clip can't support a trustworthy measurement (low fps,
  * camera view, phase events out of order, implausible value); then ``flagged`` is always
  * False and ``not_screened_reason`` says why. ``elbow_extension_deg`` is still reported.
@@ -249,6 +265,8 @@ export interface LegalityResult {
   flagged: boolean;
   screened: boolean;
   not_screened_reason: string | null;
+  verdict: "legal" | "not_legal" | "cannot_judge";
+  verdict_text: string;
   confidence: "low" | "medium" | "high";
   note: string;
   front_foot_no_ball: boolean | null;
@@ -403,6 +421,7 @@ export interface DeliveryOut {
   delivery_id: string;
   session_id: string;
   fps: number;
+  analysis_fps: number;
   width: number;
   height: number;
   bowling_arm: "right" | "left";
@@ -567,6 +586,32 @@ export interface LocalSettings {
   use_phase_model: boolean;
 }
 /**
+ * Everyone tracked in a session's video, and which one was analysed as the bowler.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "PeopleTracks".
+ */
+export interface PeopleTracks {
+  width: number;
+  height: number;
+  fps: number;
+  frame_count: number;
+  chosen_track_id: number | null;
+  chosen_by: "auto" | "user";
+  people: TrackedPerson[];
+}
+/**
+ * One person the tracker followed: their box (x1, y1, x2, y2) in each frame seen.
+ *
+ * This interface was referenced by `BowlSense`'s JSON-Schema
+ * via the `definition` "TrackedPerson".
+ */
+export interface TrackedPerson {
+  track_id: number;
+  frames: number[];
+  boxes: [number, number, number, number][];
+}
+/**
  * A bowler's pose over time.
  *
  * This interface was referenced by `BowlSense`'s JSON-Schema
@@ -665,6 +710,9 @@ export interface SessionResult {
   bowling_arm: "right" | "left";
   pose_backend: string;
   bowler_track_id: number | null;
+  video_fps: number;
+  slow_motion_factor: number;
+  slow_motion_source: "none" | "auto" | "user";
   consistency: ConsistencyResult | null;
   coach_source: "ollama" | "template";
   coach_note: string;

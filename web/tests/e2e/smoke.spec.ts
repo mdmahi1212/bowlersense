@@ -16,7 +16,7 @@ test("upload a synthetic delivery and see the results", async ({ page }) => {
 
   await page.waitForURL(/\/sessions\/[0-9a-f-]{36}$/);
   await expect(page.getByTestId("technique-score")).toBeVisible({ timeout: 200_000 });
-  await expect(page.getByText("Flagged: 1 of 1")).toBeVisible();
+  await expect(page.getByTestId("legality-verdict").first()).toHaveText("NOT LEGAL");
   await expect(page.getByTestId("coach-report")).toContainText("not medical advice");
   await page.screenshot({ path: "test-results/screens/session.png", fullPage: true });
 

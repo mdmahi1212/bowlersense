@@ -200,6 +200,8 @@ Config lives in `config/default.yaml`; local settings-page overrides are in `dat
 - 2D video gives approximate joint angles. Out-of-plane motion is foreshortened, and a single camera can't measure everything: the UI marks checks as "needs front view" or "needs side view".
 - Legality screening is not an ICC test. Injury risk is a screening heuristic, not a diagnosis.
 - Speed, length and line need a crease calibration and a camera that sees the ball's flight. Without them BowlSense reports nothing rather than a guess.
-- Picking the right person as the bowler: a selector trained on labelled match footage is right 83.5% of the time on held-out videos (91% when the tracker has the bowler). Close-up phone clips of a bowler running straight at the camera aren't in that dataset and can still pick the wrong person.
+- Picking the right person as the bowler: a selector trained on labelled match footage is right 88.2% of the time on held-out videos (92.6% when the tracker has the bowler). Broken tracks are stitched, and identity swaps (the bowler passing the batter or umpire) are split by clothing colour. If it still picks the wrong person, use "Wrong person? Pick the bowler" on the session page.
+- Slow-motion clips are detected from how fast the bowling arm turns and analysed at their real-time frame rate. You can also set the factor and the camera view on upload. Auto-detected factors are approximate, and so are speeds from them.
+- Legality is LEGAL / NOT LEGAL only when the clip allows it (side-on, 60+ fps real time). Otherwise it says CAN'T JUDGE with the reason. If arm-horizontal can't be found, the elbow is measured over the last 80 ms before release, at low confidence.
 - The learned models were trained on a modest dataset. Pace/spin classification is about 63% accurate on held-out real clips, so treat it as indicative.
 - CPU-only pose estimation takes a few minutes for a long clip.

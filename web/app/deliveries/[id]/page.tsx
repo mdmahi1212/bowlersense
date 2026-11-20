@@ -6,6 +6,7 @@ import { AngleChart } from "@/components/AngleChart";
 import { BodyRiskMap } from "@/components/BodyRiskMap";
 import { FaultList } from "@/components/FaultList";
 import { KeyframeStrip } from "@/components/KeyframeStrip";
+import { VerdictWord } from "@/components/LegalityVerdict";
 import { RiskGauge } from "@/components/RiskGauge";
 import { VideoPlayer, type SeekRequest } from "@/components/VideoPlayer";
 import { Badge } from "@/components/ui/Badge";
@@ -81,13 +82,7 @@ function DeliveryView({ out }: { out: DeliveryOut }) {
           {d.delivery_type && (
             <Badge>{d.delivery_type.delivery_type === "fast" ? "Pace" : "Spin"}</Badge>
           )}
-          {!d.legality.screened ? (
-            <Badge>Elbow not screened</Badge>
-          ) : d.legality.flagged ? (
-            <Badge className="border-bad/40 bg-bad/15 text-bad">Elbow flagged</Badge>
-          ) : (
-            <Badge className="border-good/40 bg-good/15 text-good">Elbow within limit</Badge>
-          )}
+          <VerdictWord verdict={d.legality.verdict} size="sm" />
         </div>
       </div>
 
@@ -97,6 +92,7 @@ function DeliveryView({ out }: { out: DeliveryOut }) {
             overlaySrc={fileUrl(out.overlay)}
             rawSrc={api.videoUrl(out.session_id)}
             fps={out.fps}
+            realFps={out.analysis_fps}
             clipStart={d.clip_start}
             clipStop={d.clip_stop ?? d.clip_start + d.phases.follow_through_end + 1}
             phases={d.phases}
@@ -110,6 +106,8 @@ function DeliveryView({ out }: { out: DeliveryOut }) {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted">Technique score</dt>
               <dd>{d.technique_score.toFixed(0)}/100</dd>
+              <dt className="text-muted">Legality</dt>
+              <dd>{d.legality.verdict_text}</dd>
               <dt className="text-muted">Elbow extension</dt>
               <dd>
                 {d.legality.screened ? (

@@ -5,6 +5,8 @@ import { use, useState } from "react";
 import { CalibrationPanel } from "@/components/CalibrationPanel";
 import { CoachChat } from "@/components/CoachChat";
 import { FatigueTrend } from "@/components/FatigueTrend";
+import { VerdictWord, sessionVerdict } from "@/components/LegalityVerdict";
+import { PersonPicker } from "@/components/PersonPicker";
 import { PitchMap } from "@/components/PitchMap";
 import { RiskGauge } from "@/components/RiskGauge";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -74,10 +76,47 @@ function SessionView({ out, reload }: { out: SessionOut; reload: () => void }) {
           }
         />
       )}
+      {status === "failed" && <WrongPerson sessionId={id} reload={reload} failed />}
       {status === "deleted" && <Empty title="This session was deleted." />}
+      {status === "done" && out.result && out.result.pose_backend !== "pose-json" && (
+        <WrongPerson sessionId={id} reload={reload} />
+      )}
       {status === "done" && out.result && <Results out={out} result={out.result} reload={reload} />}
       {status === "done" && !out.result && <Loading label="Loading results…" />}
     </div>
+  );
+}
+
+function WrongPerson({
+  sessionId,
+  reload,
+  failed = false,
+}: {
+  sessionId: string;
+  reload: () => void;
+  failed?: boolean;
+}) {
+  const [open, setOpen] = useState(failed);
+  return (
+    <Card>
+      <CardTitle
+        aside={
+          <Button variant="ghost" onClick={() => setOpen((o) => !o)}>
+            {open ? "Close" : "Wrong person? Pick the bowler"}
+          </Button>
+        }
+      >
+        Bowler
+      </CardTitle>
+      {open ? (
+        <PersonPicker sessionId={sessionId} onChosen={reload} />
+      ) : (
+        <p className="text-sm text-muted">
+          If the skeleton follows someone other than the bowler, pick the right person and the video
+          is analysed again.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -157,20 +196,20 @@ function Results({
           <RiskGauge score={injury} />
         </Card>
         <Card>
-          <CardTitle>Elbow legality</CardTitle>
-          {screened.length === 0 ? (
-            <Badge>Not screened</Badge>
-          ) : flagged > 0 ? (
-            <Badge className="border-bad/40 bg-bad/15 text-bad">
-              Flagged: {flagged} of {screened.length}
-            </Badge>
-          ) : (
-            <Badge className="border-good/40 bg-good/15 text-good">Within 15°</Badge>
-          )}
-          {screened.length > 0 && (
-            <p className="mt-2 text-sm">Max extension {fmt(maxExt, 1, "°")}</p>
-          )}
-          <p className="mt-1 text-xs text-muted">{(screened[0] ?? ds[0])?.legality.note}</p>
+          <CardTitle>Legality</CardTitle>
+          <VerdictWord verdict={sessionVerdict(ds.map((d) => d.legality.verdict))} />
+          <p className="mt-2 text-sm">
+            {screened.length === 0
+              ? ds[0]?.legality.verdict_text
+              : `${screened.length - flagged} legal, ${flagged} not legal` +
+                (ds.length > screened.length
+                  ? `, ${ds.length - screened.length} can't judge`
+                  : "") +
+                ` · max elbow straightening ${fmt(maxExt, 1, "°")} (limit 15°)`}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            2D video screening, not the official ICC test (which uses 3D motion capture).
+          </p>
         </Card>
         <Card>
           <CardTitle>Consistency</CardTitle>
@@ -195,7 +234,7 @@ function Results({
                 <th className="p-2 font-medium">#</th>
                 <th className="p-2 font-medium">Technique</th>
                 <th className="p-2 font-medium">Injury risk</th>
-                <th className="p-2 font-medium">Elbow</th>
+                <th className="p-2 font-medium">Legality</th>
                 <th className="p-2 font-medium">Faults</th>
                 <th className="p-2 font-medium">Speed</th>
                 <th className="p-2 font-medium">Length</th>
@@ -212,14 +251,12 @@ function Results({
                     <td className={`p-2 ${band.text}`}>
                       {d.injury.overall.toFixed(0)} ({band.label})
                     </td>
-                    <td className={`p-2 ${d.legality.flagged ? "text-bad" : ""}`}>
-                      {d.legality.screened ? (
-                        <>
+                    <td className="p-2">
+                      <VerdictWord verdict={d.legality.verdict} size="sm" />
+                      {d.legality.screened && (
+                        <span className="ml-1 text-muted">
                           {fmt(d.legality.elbow_extension_deg, 1, "°")}
-                          {d.legality.flagged ? " flagged" : ""}
-                        </>
-                      ) : (
-                        <span className="text-muted">not screened</span>
+                        </span>
                       )}
                     </td>
                     <td className="p-2">{d.faults.map((f) => f.name).join(", ") || "None"}</td>

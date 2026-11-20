@@ -23,6 +23,8 @@ export default function UploadPage() {
   const [poseFile, setPoseFile] = useState<File | null>(null);
   const [bowlerId, setBowlerId] = useState("");
   const [allowLowFps, setAllowLowFps] = useState(false);
+  const [slowMotion, setSlowMotion] = useState("auto");
+  const [cameraView, setCameraView] = useState("auto");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +34,15 @@ export default function UploadPage() {
     setProgress(0);
     try {
       const { promise } = uploadSession(
-        { file, poseFile, bowlerId: bowlerId || undefined, allowLowFps },
+        {
+          file,
+          poseFile,
+          bowlerId: bowlerId || undefined,
+          allowLowFps,
+          slowMotion: slowMotion === "auto" ? undefined : Number(slowMotion),
+          cameraView:
+            cameraView === "auto" ? undefined : (cameraView as "side" | "front" | "behind"),
+        },
         setProgress,
       );
       const out = await promise;
@@ -61,6 +71,40 @@ export default function UploadPage() {
         <Card className={photo ? "hidden" : undefined}>
           <CardTitle>Bowler</CardTitle>
           <BowlerPicker value={bowlerId} onChange={setBowlerId} />
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              Slow-motion video?
+              <select
+                value={slowMotion}
+                onChange={(e) => setSlowMotion(e.target.value)}
+                className="rounded-md border border-border bg-surface-2 px-3 py-2"
+              >
+                <option value="auto">Detect automatically</option>
+                <option value="1">No, real speed</option>
+                {[2, 4, 8, 10, 16].map((f) => (
+                  <option key={f} value={f}>
+                    Yes, {f}× slower
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-muted">
+                Slowed clips are analysed at their real-time frame rate (e.g. 50 fps × 8 = 400 fps).
+              </span>
+            </label>
+            <label className="flex flex-col gap-1">
+              Camera view
+              <select
+                value={cameraView}
+                onChange={(e) => setCameraView(e.target.value)}
+                className="rounded-md border border-border bg-surface-2 px-3 py-2"
+              >
+                <option value="auto">Detect automatically</option>
+                <option value="side">Side-on (needed for legality)</option>
+                <option value="front">Front-on (facing the bowler)</option>
+                <option value="behind">From behind the bowler</option>
+              </select>
+            </label>
+          </div>
           <label className="mt-3 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
