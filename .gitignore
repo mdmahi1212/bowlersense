@@ -51,3 +51,6 @@ data/training/
 
 # Local settings-page overrides (per machine)
 data/settings.json
+
+# personal data-download scripts and caches
+get_data/
