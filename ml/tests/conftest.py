@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+os.environ.setdefault("BOWLSENSE_ACCURACY", "fast")  # tests use the fast models
 
 from bowlsense import offline
 from bowlsense.config import Settings, load_settings

@@ -55,7 +55,13 @@ def load_backend(name: str, settings: object, models_dir: object) -> PoseBackend
     if name == "rtm":
         from bowlsense.pose.rtm import load_rtm
 
-        return load_rtm(folder, settings.rtm_model, settings.rtm_input_size, settings.crop_padding)
+        return load_rtm(
+            folder,
+            settings.rtm_model,
+            settings.rtm_input_size,
+            settings.crop_padding,
+            flip=settings.use_flip_test,
+        )
     if name == "mediapipe":
         from bowlsense.pose.mediapipe_backend import load_mediapipe
 

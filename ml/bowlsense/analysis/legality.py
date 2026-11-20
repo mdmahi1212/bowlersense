@@ -20,14 +20,38 @@ from bowlsense.schemas import KEYPOINT_NAMES, Confidence, LegalityResult, PhaseE
 Point = tuple[float, float]
 
 
+def _track3(seq: PoseSequence, name: str) -> FloatArray:
+    """(frames, 3) x, y, z of one joint; ``NaN`` where it or its depth is missing."""
+    out = np.full((len(seq.frames), 3), np.nan)
+    for i, f in enumerate(seq.frames):
+        k = f.keypoints.get(name)
+        if k is not None and k.z is not None:
+            out[i] = (k.x, k.y, k.z)
+    return out
+
+
+ARM_3D_MIN_COVERAGE = 0.8  # use 3D only when the lifted depth covers most frames
+
+
+def arm_is_3d(seq: PoseSequence) -> bool:
+    """True when the bowling arm has 3D-lifted depth (MotionBERT) on most frames."""
+    if not seq.frames:
+        return False
+    names = [joint(seq.bowling_arm, "bowling", p) for p in ("shoulder", "elbow", "wrist")]
+    have = np.all([np.isfinite(_track3(seq, n)[:, 2]) for n in names], axis=0)
+    return float(np.mean(have)) >= ARM_3D_MIN_COVERAGE
+
+
 def elbow_angles(seq: PoseSequence) -> FloatArray:
-    """Bowling-arm elbow angle per frame (180 = straight); ``NaN`` where a joint is missing."""
+    """Bowling-arm elbow angle per frame (180 = straight); ``NaN`` where a joint is missing.
+
+    Measured in 3D when the sequence has MotionBERT depth (``pose.lift_3d``), which removes
+    the foreshortening a 2D camera sees when the arm swings towards or away from it."""
     arm = seq.bowling_arm
-    return joint_angle(
-        keypoint_track(seq, joint(arm, "bowling", "shoulder")),
-        keypoint_track(seq, joint(arm, "bowling", "elbow")),
-        keypoint_track(seq, joint(arm, "bowling", "wrist")),
-    )
+    names = [joint(arm, "bowling", p) for p in ("shoulder", "elbow", "wrist")]
+    if arm_is_3d(seq):
+        return joint_angle(*(_track3(seq, n) for n in names))
+    return joint_angle(*(keypoint_track(seq, n) for n in names))
 
 
 def elbow_extension(angles: FloatArray, arm_horizontal: int, release: int) -> float:
@@ -232,6 +256,8 @@ def assess_legality(
     extension = elbow_extension(fitted, phases.arm_horizontal, phases.release)
     confidence = _confidence(seq, phases, settings)
     note = "2D video screening only. The official ICC test uses 3D motion capture."
+    if arm_is_3d(raw if raw is not None else seq):
+        note += " The elbow was measured in 3D estimated from the video (MotionBERT)."
     if estimated_ah:
         confidence = "low"
         note += (

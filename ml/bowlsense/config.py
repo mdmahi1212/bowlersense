@@ -83,6 +83,7 @@ class DetectSettings(_Section):
     """Person (and later ball) detection and tracking."""
 
     yolo_model: str = Field(min_length=1)
+    accurate_yolo_model: str = "yolo11x.pt"
     person_conf: float = Field(gt=0, lt=1)
     tracker: str = Field(min_length=1)
     min_track_frames: int = Field(ge=1)
@@ -110,6 +111,16 @@ class PoseSettings(_Section):
     lift_3d: bool
     lift_model: str = Field(min_length=1)
     lift_window: int = Field(ge=9)
+    accuracy: Literal["auto", "fast", "accurate"] = "auto"
+    accurate_rtm_model: str = "rtmpose-x_halpe26_384x288.onnx"
+    accurate_rtm_input_size: tuple[int, int] = (288, 384)
+    flip_test: bool = True
+    use_flip_test: bool = False  # set by the accurate profile (see local_settings)
+    accurate_lift_3d: bool = True
+    wrist_refine: bool = True
+    refine_window_s: float = Field(default=0.15, gt=0, le=1)
+    refine_conf: float = Field(default=0.6, ge=0, le=1)
+    refine_max_jump_h: float = Field(default=0.12, gt=0, le=1)
 
 
 class BodySettings(_Section):
@@ -388,6 +399,8 @@ class BallSettings(_Section):
     meas_noise_px: float = Field(gt=0)
     accel_noise_px_s2: float = Field(gt=0)
     track_after_release_s: float = Field(gt=0)
+    imgsz: int = Field(default=640, ge=320, le=1920)
+    accurate_imgsz: int = Field(default=1280, ge=320, le=1920)
 
 
 class JobSettings(_Section):

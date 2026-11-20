@@ -236,6 +236,10 @@ def extract_pose(
     log.info("front end: %s arm (%s), %s view, %d warning(s)", arm, arm_result.method, view,
              len(warnings))  # fmt: skip
     seq = seq.model_copy(update={"bowling_arm": arm, "view": view})
+    if settings.pose.wrist_refine and used_backend != "pose-json":  # keep imported poses as-is
+        from bowlsense.pose.refine import refine_wrist
+
+        seq = refine_wrist(video, seq, find_releases(cleaned, settings.clipping), settings.pose)
     if settings.pose.lift_3d:  # optional, feature-flagged; every module works in 2D without it
         from bowlsense.pose.lift3d import lift_sequence, load_lifter
 

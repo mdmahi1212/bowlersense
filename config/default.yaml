@@ -17,6 +17,7 @@ video:
   slowmo_factors: [2, 3, 4, 5, 6, 8, 10, 12, 16, 20]  # auto factor snaps to the nearest of these
 detect:
   yolo_model: yolo11n.pt          # in models/; person (class 0) and sports ball (class 32)
+  accurate_yolo_model: yolo11x.pt # used by the accurate profile (pose.accuracy)
   person_conf: 0.3
   tracker: bytetrack.yaml         # bundled with ultralytics
   min_track_frames: 10            # shorter tracks are ignored when picking the bowler
@@ -38,6 +39,17 @@ pose:
   savgol_window_s: 0.1  # Savitzky-Golay window ~ fps/10 frames, rounded up to odd
   savgol_polyorder: 2
   lift_3d: false        # optional MotionBERT 3D lift (scripts/export_motionbert.py makes the model)
+  # Accuracy profile. "auto" = the accurate models below when a CUDA GPU is in use and their
+  # files are in models/ (scripts/download_models.py), else the fast ones above.
+  accuracy: auto        # auto | fast | accurate
+  accurate_rtm_model: rtmpose-x_halpe26_384x288.onnx
+  accurate_rtm_input_size: [288, 384]
+  flip_test: true       # accurate profile: also run pose on the mirrored crop and average
+  accurate_lift_3d: true  # accurate profile: 3D-lift with MotionBERT when its model is present
+  wrist_refine: true    # optical-flow refinement of the bowling wrist around each release
+  refine_window_s: 0.15 # ...over this long either side of release
+  refine_conf: 0.6      # pose wrist points below this confidence are replaced by the flow track
+  refine_max_jump_h: 0.12  # ...and so are pose points this far (fraction of height) off the flow
   lift_model: motionbert_lite.onnx   # in models/
   lift_window: 243      # frames per MotionBERT window
 body:

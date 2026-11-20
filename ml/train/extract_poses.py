@@ -68,10 +68,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dataset", type=Path)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--backend", default="rtm", choices=["rtm", "mediapipe"])
+    parser.add_argument(
+        "--reverse", action="store_true",
+        help="work from the last video backwards (run a second worker alongside the first)",
+    )  # fmt: skip
+    parser.add_argument(
+        "--accurate", action="store_true",
+        help="use the accurate profile (RTMPose-x 384x288 with flip test) instead of the fast one",
+    )  # fmt: skip
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     root = dataset_dir(args.dataset)
     settings = load_settings()
+    if args.accurate:
+        from bowlsense.local_settings import accuracy_profile
+
+        settings = accuracy_profile(
+            settings.model_copy(
+                update={"pose": settings.pose.model_copy(update={"accuracy": "accurate"})}
+            )
+        )
+        log.info("accurate profile: %s %s, flip test %s", settings.pose.rtm_model,
+                 settings.pose.rtm_input_size, settings.pose.use_flip_test)  # fmt: skip
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
     todo: dict[str, list[Delivery]] = defaultdict(list)
@@ -84,7 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     backend = load_backend(args.backend, settings.pose, settings.storage.models_path)
     total = sum(len(v) for v in todo.values())
     done, t0 = 0, time.time()
-    for video, items in sorted(todo.items()):
+    for video, items in sorted(todo.items(), reverse=args.reverse):
+        items = [d for d in items if not (out / f"{d.key}.json").is_file()]  # another worker?
+        if not items:
+            continue
         path = root / "videos" / f"{video}.mp4"
         info = probe_video(path)
         before, after = round(BEFORE_S * info.fps), round(AFTER_S * info.fps)

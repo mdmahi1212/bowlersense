@@ -166,7 +166,8 @@ class YoloBallDetector:
         y0 = int(min(max(0, centre[1] - half), max(0, h - self.ball.roi_px)))
         crop = frame[y0 : y0 + self.ball.roi_px, x0 : x0 + self.ball.roi_px]
         res = self._model.predict(crop, classes=[self.ball.yolo_class], conf=self.ball.det_conf,
-                                  imgsz=640, device=self._device, verbose=False)  # fmt: skip
+                                  imgsz=self.ball.imgsz, device=self._device,
+                                  verbose=False)  # fmt: skip
         boxes = res[0].boxes
         if boxes is None or len(boxes) == 0:
             return []
