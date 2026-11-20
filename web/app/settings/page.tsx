@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHead } from "@/components/ui/PageHead";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -19,8 +20,12 @@ export default function SettingsPage() {
     );
   if (!settings.data) return <Loading />;
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="space-y-8">
+      <PageHead
+        kicker="System"
+        title="Settings"
+        deck="Everything is stored on this computer. Choose the coach model, the pose engine and the GPU."
+      />
       <SettingsForm
         key={JSON.stringify(settings.data.settings)}
         initial={settings.data.settings}
@@ -87,7 +92,7 @@ function SettingsForm({
     }
   }
 
-  const field = "rounded-md border border-border bg-surface-2 px-3 py-2";
+  const field = "border border-border bg-surface-2 px-3 py-2";
   return (
     <Card>
       <CardTitle>Analysis</CardTitle>
@@ -190,7 +195,7 @@ function DangerZone({ storageBytes, onDeleted }: { storageBytes: number; onDelet
           id="confirm-delete"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
-          className="w-28 rounded-md border border-border bg-surface-2 px-2 py-1.5"
+          className="w-28 border border-border bg-surface-2 px-2 py-1.5"
         />
         <Button variant="danger" disabled={confirm !== "DELETE"} onClick={wipe}>
           Delete all my data

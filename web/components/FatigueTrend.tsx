@@ -14,10 +14,10 @@ import {
 import type { FatigueResult } from "@/lib/types";
 
 const SERIES = [
-  ["runup_speed_pct", "Run-up speed", "#38bdf8"],
-  ["release_height_pct", "Release height", "#a78bfa"],
-  ["wrist_speed_pct", "Wrist speed", "#f472b6"],
-  ["technique_score_pct", "Technique score", "#22c55e"],
+  ["runup_speed_pct", "Run-up speed", "#2f5d8a"],
+  ["release_height_pct", "Release height", "#a8670d"],
+  ["wrist_speed_pct", "Wrist speed", "#b3261e"],
+  ["technique_score_pct", "Technique score", "#16140f"],
 ] as const;
 
 /** % change of each tracked metric from the baseline deliveries. */

@@ -22,7 +22,7 @@ export function KeyframeStrip({
           key={key}
           type="button"
           onClick={() => onJump(phases[key])}
-          className="overflow-hidden rounded-md border border-border text-left hover:border-accent"
+          className="overflow-hidden border border-border text-left hover:border-accent"
         >
           <img
             src={fileUrl(keyframes[key])}

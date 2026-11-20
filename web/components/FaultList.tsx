@@ -30,7 +30,7 @@ export function FaultList({
       {faults.map((f) => {
         const sev = severityLabel(f.severity);
         return (
-          <div key={f.code} className="rounded-lg border border-border p-3">
+          <div key={f.code} className="border border-border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">{f.name}</p>
               <div className="flex items-center gap-2">

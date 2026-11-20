@@ -55,7 +55,7 @@ export function ReleaseLoop({
     const chain = ["shoulder", "elbow", "wrist"].map((p) => jointName(arm, "bowling", p));
     // wrist path over the whole loop window
     ctx.setLineDash([6 * s, 5 * s]);
-    ctx.strokeStyle = "rgba(198,244,50,0.55)";
+    ctx.strokeStyle = "rgba(255,91,58,0.55)";
     ctx.lineWidth = 1.8 * s;
     ctx.beginPath();
     let pen = false;
@@ -78,7 +78,7 @@ export function ReleaseLoop({
         const k = frames.get(i)?.keypoints;
         if (!k) continue;
         const alpha = 0.12 + 0.5 * (1 - (f - i) / (step * 6));
-        ctx.strokeStyle = `rgba(198,244,50,${alpha.toFixed(2)})`;
+        ctx.strokeStyle = `rgba(255,91,58,${alpha.toFixed(2)})`;
         ctx.lineWidth = 2.4 * s;
         ctx.beginPath();
         chain.forEach((n, j) => {
@@ -97,7 +97,7 @@ export function ReleaseLoop({
         const q = k[b];
         if (!p || !q) continue;
         const arm3 = chain.includes(a) && chain.includes(b);
-        ctx.strokeStyle = arm3 ? "#c6f432" : "rgba(255,255,255,0.75)";
+        ctx.strokeStyle = arm3 ? "#ff5b3a" : "rgba(242,238,229,0.8)";
         ctx.lineWidth = (arm3 ? 3.4 : 2) * s;
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
@@ -108,7 +108,7 @@ export function ReleaseLoop({
     // release position of the wrist
     const r = frames.get(releaseFrame)?.keypoints[wristName];
     if (r) {
-      ctx.strokeStyle = "#ff7a2f";
+      ctx.strokeStyle = "#ffc94a";
       ctx.lineWidth = 2 * s;
       ctx.beginPath();
       ctx.arc(r.x, r.y, 9 * s, 0, Math.PI * 2);
@@ -166,7 +166,7 @@ export function ReleaseLoop({
   const a = frameAngles(frames?.get(current), arm);
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-md border border-release/60 bg-black">
+      <div className="relative overflow-hidden bg-black">
         <video
           ref={video}
           src={videoSrc}
@@ -181,14 +181,14 @@ export function ReleaseLoop({
           className="pointer-events-none absolute inset-0 h-full w-full object-contain"
         />
         <div className="pointer-events-none absolute left-2 top-2 flex gap-1.5">
-          <span className="rounded-sm bg-release px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-black">
+          <span className="bg-release px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-white">
             Release loop
           </span>
-          <span className="rounded-sm bg-black/70 px-1.5 py-0.5 text-[10px] text-foreground">
+          <span className="bg-black/70 px-1.5 py-0.5 text-[10px] text-[#f2eee5]">
             ±{Math.round((half / realFps) * 1000)} ms · {Math.round(rate * 100)}% speed
           </span>
         </div>
-        <div className="tabular pointer-events-none absolute bottom-2 left-2 rounded-sm bg-black/75 px-2 py-1 text-xs">
+        <div className="tabular pointer-events-none absolute bottom-2 left-2 bg-black/75 px-2 py-1 text-xs text-[#f2eee5]">
           <span className={cn(Math.abs(ms) < 1000 / realFps ? "text-release" : "text-foreground")}>
             {ms >= 0 ? "+" : ""}
             {ms.toFixed(0)} ms
@@ -200,7 +200,7 @@ export function ReleaseLoop({
         <button
           type="button"
           onClick={() => setPaused((p) => !p)}
-          className="rounded-sm border border-border px-2 py-1 hover:border-accent"
+          className="border border-border px-2 py-1 hover:border-accent"
         >
           {paused ? "▶ Loop" : "❚❚ Hold"}
         </button>
@@ -210,7 +210,7 @@ export function ReleaseLoop({
             type="button"
             onClick={() => setRate(r)}
             className={cn(
-              "tabular rounded-sm border px-2 py-1",
+              "tabular border px-2 py-1",
               rate === r ? "border-accent text-accent" : "border-border hover:border-accent",
             )}
           >
@@ -277,7 +277,7 @@ function ReleaseSequence({
           <div
             key={f}
             className={cn(
-              "rounded-sm border bg-surface-2 p-1 text-center",
+              "border bg-surface-2 p-1 text-center",
               isRel ? "border-release" : near ? "border-accent" : "border-border",
             )}
           >
@@ -298,7 +298,7 @@ function ReleaseSequence({
                     y1={p.y}
                     x2={q.x}
                     y2={q.y}
-                    stroke={arm3 ? "#c6f432" : "#9aa8a2"}
+                    stroke={arm3 ? "#b3261e" : "#6d6658"}
                     strokeWidth={size / (arm3 ? 45 : 70)}
                     strokeLinecap="round"
                   />

@@ -268,7 +268,7 @@ class LegalityResult(_Model):
             flagged = self.elbow_extension_deg > self.threshold_deg
             word = "Not legal" if flagged else "Legal"
             rel = "more than" if flagged else "within"
-            why = (self.not_screened_reason or "Unverified: the clip can't be measured reliably.")
+            why = self.not_screened_reason or "Unverified: the clip can't be measured reliably."
             why = why.replace("Not screened:", "Unverified:")
             self.flagged = flagged
             self.verdict = "not_legal" if flagged else "legal"

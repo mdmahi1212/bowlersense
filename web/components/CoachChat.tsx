@@ -52,8 +52,8 @@ export function CoachChat({ sessionId }: { sessionId: string }) {
             key={i}
             className={
               t.role === "user"
-                ? "ml-8 rounded-lg bg-accent/15 p-2 text-sm"
-                : "mr-8 whitespace-pre-wrap rounded-lg bg-surface-2 p-2 text-sm"
+                ? "ml-8 bg-accent/15 p-2 text-sm"
+                : "mr-8 whitespace-pre-wrap bg-surface-2 p-2 text-sm"
             }
           >
             <span className="sr-only">{t.role === "user" ? "You:" : "Coach:"}</span>
@@ -76,7 +76,7 @@ export function CoachChat({ sessionId }: { sessionId: string }) {
           onChange={(e) => setMessage(e.target.value)}
           maxLength={2000}
           placeholder="Ask the coach…"
-          className="flex-1 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm"
+          className="flex-1 border border-border bg-surface-2 px-3 py-2 text-sm"
         />
         <Button type="submit" disabled={busy || !message.trim()}>
           Send

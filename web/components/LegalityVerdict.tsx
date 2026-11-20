@@ -16,8 +16,9 @@ export function sessionVerdict(verdicts: Verdict[]): Verdict {
   return "cannot_judge";
 }
 
-/** The verdict word, coloured and always written out in text. ``verified={false}`` adds an
- *  "unverified" tag: the verdict follows the angle but the clip can't fully confirm it. */
+/** The verdict, always written out in words. ``lg`` is a serif headline; ``sm`` a dot + word.
+ *  ``verified={false}`` adds "unverified": the verdict follows the angle, but the clip can't
+ *  fully confirm it. */
 export function VerdictWord({
   verdict,
   size = "lg",
@@ -28,21 +29,38 @@ export function VerdictWord({
   verified?: boolean;
 }) {
   const v = VERDICT_STYLE[verdict];
+  const colour =
+    verdict === "legal" ? "text-good" : verdict === "not_legal" ? "text-bad" : "text-muted";
+  if (size === "lg") {
+    return (
+      <span className="inline-flex items-baseline gap-3">
+        <span
+          data-testid="legality-verdict"
+          className={cn(
+            "font-display text-6xl leading-none lowercase first-letter:uppercase",
+            colour,
+          )}
+        >
+          {v.word}
+        </span>
+        {!verified && <span className="kicker !text-warn">Unverified</span>}
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5 text-sm">
       <span
-        data-testid="legality-verdict"
         className={cn(
-          "inline-block rounded border font-bold tracking-wide",
-          size === "lg" ? "px-2.5 py-0.5 text-lg" : "px-1.5 py-px text-[11px]",
-          v.cls,
+          "h-1.5 w-1.5 rounded-full",
+          verdict === "legal" ? "bg-good" : verdict === "not_legal" ? "bg-bad" : "bg-muted",
         )}
-      >
+      />
+      <span data-testid="legality-verdict" className={cn("font-medium", colour)}>
         {v.word}
       </span>
       {!verified && (
         <span
-          className={cn("text-warn", size === "lg" ? "text-sm" : "text-[11px]")}
+          className="text-xs text-warn"
           title="The verdict follows the measured angle, but this clip can't fully confirm it"
         >
           unverified

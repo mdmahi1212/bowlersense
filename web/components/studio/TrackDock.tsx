@@ -17,12 +17,12 @@ export interface Marker {
 }
 
 const PHASES: [keyof PhaseEvents, keyof PhaseEvents, string, string][] = [
-  ["run_up_start", "bound", "Run-up", "#2a3a37"],
-  ["bound", "bfc", "Bound", "#3a4a2a"],
-  ["bfc", "ffc", "Delivery stride", "#4b5d1d"],
-  ["ffc", "arm_horizontal", "Brace", "#5f7a16"],
-  ["arm_horizontal", "release", "Arm action", "#8fb81b"],
-  ["release", "follow_through_end", "Follow-through", "#5a3a26"],
+  ["run_up_start", "bound", "Run-up", "#a39a87"],
+  ["bound", "bfc", "Bound", "#8f8672"],
+  ["bfc", "ffc", "Delivery stride", "#7a7262"],
+  ["ffc", "arm_horizontal", "Brace", "#5f584b"],
+  ["arm_horizontal", "release", "Arm action", "#b3261e"],
+  ["release", "follow_through_end", "Follow-through", "#3f3a31"],
 ];
 
 /** Video-editor style timeline: phase lane, data lanes with sparklines, fault markers,
@@ -54,7 +54,7 @@ export function TrackDock({
   const ticks = Array.from({ length: 9 }, (_, i) => Math.round((i / 8) * last));
 
   return (
-    <div className="grid grid-cols-[8.5rem_1fr] overflow-hidden rounded-md border border-border bg-surface text-[11px]">
+    <div className="grid grid-cols-[8.5rem_1fr] overflow-hidden border border-border bg-surface text-[11px]">
       <div className="border-r border-border bg-surface-2/60">
         <div className="h-6 border-b border-border px-2 leading-6 text-muted">Time</div>
         <div className="h-7 border-b border-border px-2 leading-7 font-display uppercase tracking-wider">
@@ -105,7 +105,7 @@ export function TrackDock({
           {PHASES.map(([a, b, label, colour]) => (
             <div
               key={label}
-              className="absolute inset-y-1 overflow-hidden rounded-[2px] px-1 leading-5 text-[10px] text-white/85"
+              className="absolute inset-y-1 overflow-hidden px-1 leading-5 text-[10px] text-white/85"
               style={{
                 left: x(phases[a]),
                 width: `calc(${x(phases[b])} - ${x(phases[a])})`,
@@ -136,7 +136,7 @@ export function TrackDock({
           className="pointer-events-none absolute inset-y-0 w-0.5 bg-release/90"
           style={{ left: x(phases.release) }}
         >
-          <span className="absolute -top-0 left-1 rounded-sm bg-release px-1 text-[9px] font-bold text-black">
+          <span className="absolute -top-0 left-1 bg-release px-1 text-[9px] font-bold text-white">
             REL
           </span>
         </div>

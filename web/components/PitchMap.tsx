@@ -2,11 +2,11 @@ import type { DeliveryMetrics } from "@/lib/types";
 
 const STUMPS_FROM_POPPING_M = 17.68 + 1.22; // bowler's popping crease -> batter's stumps
 const ZONES = [
-  ["Yorker", 0, 2, "#7c3aed"],
-  ["Full", 2, 6, "#0ea5e9"],
-  ["Good", 6, 8, "#22c55e"],
-  ["Short", 8, 10, "#f59e0b"],
-  ["Bouncer", 10, 14, "#ef4444"],
+  ["Yorker", 0, 2, "#5f584b"],
+  ["Full", 2, 6, "#2f5d8a"],
+  ["Good", 6, 8, "#2e7048"],
+  ["Short", 8, 10, "#a8670d"],
+  ["Bouncer", 10, 14, "#b3261e"],
 ] as const;
 const W = 160;
 const H = 300;

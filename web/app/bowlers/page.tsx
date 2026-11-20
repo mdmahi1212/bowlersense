@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHead } from "@/components/ui/PageHead";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -18,8 +19,12 @@ export default function BowlersPage() {
   const current = bowlers.data?.find((b) => b.id === selected) ?? bowlers.data?.[0] ?? null;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Bowlers</h1>
+    <div>
+      <PageHead
+        kicker="Players"
+        title="Bowlers"
+        deck="Profiles, their sessions and training load. Acute:chronic workload between 0.8 and 1.3 is the usual safe band."
+      />
       <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
         <div className="space-y-4">
           <NewBowler
@@ -40,7 +45,7 @@ export default function BowlersPage() {
                       type="button"
                       onClick={() => setSelected(b.id)}
                       aria-current={current?.id === b.id}
-                      className={`w-full rounded-md px-3 py-2 text-left text-sm ${current?.id === b.id ? "bg-surface-2" : "hover:bg-surface-2"}`}
+                      className={`w-full px-3 py-2 text-left text-sm ${current?.id === b.id ? "bg-surface-2" : "hover:bg-surface-2"}`}
                     >
                       <span className="font-medium">{b.name}</span>
                       <span className="block text-xs text-muted">
@@ -134,7 +139,7 @@ function NewBowler({ onCreated }: { onCreated: (b: BowlerRecord) => void }) {
     }
   }
 
-  const input = "rounded-md border border-border bg-surface-2 px-2 py-1.5";
+  const input = "border border-border bg-surface-2 px-2 py-1.5";
   return (
     <Card>
       <CardTitle>New bowler</CardTitle>

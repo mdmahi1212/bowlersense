@@ -22,7 +22,7 @@ import { api, errorText, fileUrl } from "@/lib/api";
 import { type Arm, frameAngles, frameIndex } from "@/lib/pose";
 import type { DeliveryOut, PoseSequence } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
-import { SectionHead } from "@/components/ui/SectionHead";
+import { PageHead } from "@/components/ui/PageHead";
 import { cleanName, cn, fmt } from "@/lib/utils";
 
 type Tab = "Legality" | "Joint angles" | "Mechanics" | "Faults" | "Injury load" | "Sequence";
@@ -102,14 +102,14 @@ function Workspace({
       return v === null || v === undefined ? null : abs ? Math.abs(v) : v;
     });
   const lanes: Lane[] = [
-    { label: "Elbow", unit: "°", values: values("bowling_elbow"), colour: "#c6f432" },
-    { label: "Front knee", unit: "°", values: values("front_knee"), colour: "#ff7a2f" },
-    { label: "Trunk lean", unit: "°", values: values("trunk_lean"), colour: "#7cc7ff" },
+    { label: "Elbow", unit: "°", values: values("bowling_elbow"), colour: "#b3261e" },
+    { label: "Front knee", unit: "°", values: values("front_knee"), colour: "#16140f" },
+    { label: "Trunk lean", unit: "°", values: values("trunk_lean"), colour: "#2f5d8a" },
     {
       label: "Arm speed",
       unit: "°/s",
       values: values("upper_arm_elevation_velocity", true),
-      colour: "#e9efe7",
+      colour: "#a8670d",
     },
   ];
   const markers = d.faults.flatMap((f) =>
@@ -135,47 +135,51 @@ function Workspace({
   ];
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-10 pb-10">
-      <header className="flex flex-wrap items-end justify-between gap-4 pt-2">
-        <div className="min-w-0">
-          <Link
-            href={`/sessions/${out.session_id}`}
-            className="block max-w-md truncate text-sm text-muted hover:text-foreground"
-          >
-            ← {cleanName(session.data?.session.original_name)}
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold">
-            Delivery {d.delivery_idx + 1} of {out.delivery_count}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Release at frame {d.phases.release} (
-            {d.release_source === "user" ? "set by you" : "auto-detected"}) ·{" "}
-            {out.analysis_fps.toFixed(0)} fps real time · {arm}-arm
-          </p>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          <VerdictWord verdict={d.legality.verdict} verified={d.legality.screened} />
-          <span className="flex gap-3">
-            <NavBtn href={pos > 0 ? `/deliveries/${ids[pos - 1]}` : null}>← Prev</NavBtn>
+    <div className="space-y-12">
+      <PageHead
+        kicker={
+          <>
+            <Link href={`/sessions/${out.session_id}`} className="hover:text-foreground">
+              {cleanName(session.data?.session.original_name)}
+            </Link>{" "}
+            / Delivery report
+          </>
+        }
+        title={`Delivery ${d.delivery_idx + 1} of ${out.delivery_count}`}
+        deck={`Release at frame ${d.phases.release}, ${d.release_source === "user" ? "set by you" : "auto-detected"}. ${out.analysis_fps.toFixed(0)} fps real time, ${arm}-arm.`}
+        aside={
+          <>
+            <VerdictWord verdict={d.legality.verdict} size="sm" verified={d.legality.screened} />
+            <span className="h-4 w-px bg-border" />
+            <NavBtn href={pos > 0 ? `/deliveries/${ids[pos - 1]}` : null}>← Previous</NavBtn>
             <NavBtn href={pos >= 0 && pos < ids.length - 1 ? `/deliveries/${ids[pos + 1]}` : null}>
               Next →
             </NavBtn>
-          </span>
-          <a
-            href={api.reportUrl(out.session_id)}
-            download
-            className="rounded-md border border-border px-3 py-1.5 hover:border-accent"
-          >
-            PDF
-          </a>
-        </div>
-      </header>
+            <a
+              href={api.reportUrl(out.session_id)}
+              download
+              className="bg-foreground px-4 py-2 text-background hover:bg-accent"
+            >
+              PDF report
+            </a>
+          </>
+        }
+      />
       {(error || pose.error) && (
         <ErrorBox error={error ?? `Couldn't load the skeleton: ${pose.error}`} />
       )}
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid gap-10 border-t border-foreground pt-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="min-w-0 space-y-4" aria-label="Viewer">
+          <div className="flex items-baseline justify-between">
+            <div>
+              <p className="kicker">Plate 1</p>
+              <h2 className="mt-1 font-display text-2xl">The delivery, frame by frame</h2>
+            </div>
+            <p className="hidden text-xs text-muted md:block">
+              Space play · ←/→ frame · Shift+arrows 10 · R release
+            </p>
+          </div>
           <StudioPlayer
             videoSrc={src}
             overlaySrc={fileUrl(out.overlay)}
@@ -207,7 +211,11 @@ function Workspace({
         </section>
 
         <aside className="space-y-5" aria-label="At release">
-          <SectionHead title="At release" hint="Slow-motion loop around the release point" />
+          <div>
+            <p className="kicker">Plate 2</p>
+            <h2 className="mt-1 font-display text-2xl">At the release point</h2>
+            <p className="text-sm text-muted">Slow-motion loop, ±120 ms around release.</p>
+          </div>
           <ReleaseLoop
             videoSrc={src}
             fps={out.fps}
@@ -219,7 +227,7 @@ function Workspace({
             width={out.width}
             height={out.height}
           />
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3">
             <AngleDial label="Elbow at release" value={rel.elbow} band={[160, 180]} highlight />
             <AngleDial label="Front knee" value={rel.frontKnee} band={[160, 180]} />
             <AngleDial label="Trunk lean" value={rel.trunkLean} band={[0, 35]} />
@@ -243,7 +251,7 @@ function Workspace({
       </div>
 
       <section>
-        <div className="mb-6 flex gap-6 overflow-x-auto border-b border-border" role="tablist">
+        <div className="mb-8 flex gap-8 overflow-x-auto border-b border-foreground" role="tablist">
           {tabs.map((t) => (
             <button
               key={t}
@@ -252,7 +260,7 @@ function Workspace({
               aria-selected={tab === t}
               onClick={() => setTab(t)}
               className={cn(
-                "-mb-px whitespace-nowrap border-b-2 pb-2.5 text-sm",
+                "-mb-px whitespace-nowrap border-b-[3px] pb-2 font-display text-lg",
                 tab === t
                   ? "border-accent text-foreground"
                   : "border-transparent text-muted hover:text-foreground",

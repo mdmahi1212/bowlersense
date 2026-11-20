@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHead } from "@/components/ui/PageHead";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { SkeletonView, boundsOf } from "@/components/SkeletonView";
@@ -41,8 +42,12 @@ function Compare() {
   const [refName, setRefName] = useState("");
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Compare with a reference action</h1>
+    <div className="space-y-8">
+      <PageHead
+        kicker="Insight"
+        title="Compare with a reference action"
+        deck="Your action against a textbook reference, aligned in time with dynamic time warping, joint by joint."
+      />
       <Card>
         <div className="flex flex-wrap items-end gap-3 text-sm">
           <label className="flex flex-col gap-1">
@@ -53,7 +58,7 @@ function Compare() {
                 setSessionId(e.target.value);
                 setDeliveryId("");
               }}
-              className="min-w-48 rounded-md border border-border bg-surface-2 px-3 py-2"
+              className="min-w-48 border border-border bg-surface-2 px-3 py-2"
             >
               <option value="">{delivery.data ? "(from link)" : "Choose…"}</option>
               {done.map((s) => (
@@ -69,7 +74,7 @@ function Compare() {
               <select
                 value={deliveryId}
                 onChange={(e) => setDeliveryId(e.target.value)}
-                className="rounded-md border border-border bg-surface-2 px-3 py-2"
+                className="border border-border bg-surface-2 px-3 py-2"
               >
                 <option value="">Choose…</option>
                 {session.data.delivery_ids.map((id, i) => (
@@ -85,7 +90,7 @@ function Compare() {
             <select
               value={refName}
               onChange={(e) => setRefName(e.target.value)}
-              className="min-w-56 rounded-md border border-border bg-surface-2 px-3 py-2"
+              className="min-w-56 border border-border bg-surface-2 px-3 py-2"
             >
               <option value="">Choose…</option>
               {(refs.data?.references ?? []).map((r) => (

@@ -4,7 +4,7 @@ import { Card } from "./Card";
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
     <div role="status" aria-live="polite" className="flex items-center gap-3 p-6 text-muted">
-      <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      <span className="h-px w-10 animate-pulse bg-foreground" />
       {label}
     </div>
   );
@@ -12,8 +12,8 @@ export function Loading({ label = "Loading…" }: { label?: string }) {
 
 export function ErrorBox({ error, action }: { error: string; action?: ReactNode }) {
   return (
-    <Card className="border-bad/50 bg-bad/10" role="alert">
-      <p className="font-semibold text-bad">Something went wrong</p>
+    <Card className="border-l-2 border-l-bad" role="alert">
+      <p className="font-display text-lg text-bad">Something went wrong</p>
       <p className="mt-1 text-sm">{error}</p>
       {action && <div className="mt-3">{action}</div>}
     </Card>
@@ -22,8 +22,8 @@ export function ErrorBox({ error, action }: { error: string; action?: ReactNode 
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <Card className="text-center">
-      <p className="font-semibold">{title}</p>
+    <Card className="py-10 text-center">
+      <p className="font-display text-xl">{title}</p>
       {children && <div className="mt-2 text-sm text-muted">{children}</div>}
     </Card>
   );

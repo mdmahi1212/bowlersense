@@ -65,7 +65,7 @@ export function CalibrationPanel({
         )}
       </p>
       <div
-        className="relative cursor-crosshair overflow-hidden rounded-md border border-border"
+        className="relative cursor-crosshair overflow-hidden border border-border"
         onClick={click}
       >
         <video

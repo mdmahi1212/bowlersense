@@ -15,6 +15,7 @@ import { api, type SessionEvent } from "@/lib/api";
 import type { SessionOut, SessionResult } from "@/lib/types";
 import { useAsync } from "@/lib/useAsync";
 import { useSessionStatus } from "@/lib/useSessionStatus";
+import { PageHead } from "@/components/ui/PageHead";
 import { SectionHead } from "@/components/ui/SectionHead";
 import { bandOf, bandStyle, cleanName, cn, fmt } from "@/lib/utils";
 
@@ -57,46 +58,46 @@ function SessionView({ out, reload }: { out: SessionOut; reload: () => void }) {
   const r = out.result;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 pb-10">
-      <header className="flex flex-wrap items-end justify-between gap-4 pt-2">
-        <div className="min-w-0">
-          <Link href="/sessions" className="text-sm text-muted hover:text-foreground">
-            ← Sessions
-          </Link>
-          <h1
-            className="mt-1 truncate text-2xl font-semibold"
-            title={out.session.original_name ?? ""}
-          >
-            {cleanName(out.session.original_name)}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            {r
-              ? `${r.deliveries.length} deliver${r.deliveries.length === 1 ? "y" : "ies"} · ${r.bowling_arm}-arm · ${r.view} view`
-              : `Session ${id.slice(0, 8)}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          {status !== "deleted" && status !== "done" && <StatusBadge status={status} />}
-          {(status === "done" || status === "failed") && (
-            <button
-              type="button"
-              onClick={() => setPicking((o) => !o)}
-              className="text-muted hover:text-foreground"
-            >
-              {picking ? "Close bowler picker" : "Wrong bowler?"}
-            </button>
-          )}
-          {status === "done" && (
-            <a
-              href={api.reportUrl(id)}
-              download
-              className="rounded-md border border-border px-3 py-1.5 hover:border-accent"
-            >
-              Download PDF
-            </a>
-          )}
-        </div>
-      </header>
+    <div className="space-y-14">
+      <PageHead
+        kicker={
+          <>
+            <Link href="/sessions" className="hover:text-foreground">
+              Sessions
+            </Link>{" "}
+            / Session report
+          </>
+        }
+        title={cleanName(out.session.original_name)}
+        deck={
+          r
+            ? `${r.deliveries.length} deliver${r.deliveries.length === 1 ? "y" : "ies"}, ${r.bowling_arm}-arm bowler, filmed ${r.view}-on.`
+            : `Session ${id.slice(0, 8)}`
+        }
+        aside={
+          <>
+            {status !== "deleted" && status !== "done" && <StatusBadge status={status} />}
+            {(status === "done" || status === "failed") && (
+              <button
+                type="button"
+                onClick={() => setPicking((o) => !o)}
+                className="text-muted underline-offset-4 hover:text-foreground hover:underline"
+              >
+                {picking ? "Close bowler picker" : "Wrong bowler?"}
+              </button>
+            )}
+            {status === "done" && (
+              <a
+                href={api.reportUrl(id)}
+                download
+                className="bg-foreground px-4 py-2 text-background hover:bg-accent"
+              >
+                Download PDF report
+              </a>
+            )}
+          </>
+        }
+      />
 
       {picking && (
         <Card>
@@ -178,32 +179,33 @@ function Results({
   return (
     <>
       {/* verdict + headline numbers */}
-      <section className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <section className="grid gap-12 border-t border-foreground pt-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div>
-          <p className="text-sm text-muted">Legality</p>
-          <div className="mt-2">
+          <p className="kicker">Legality screening</p>
+          <div className="mt-4">
             <VerdictWord
               verdict={sessionVerdict(ds.map((d) => d.legality.verdict))}
               verified={allVerified}
             />
           </div>
-          <p className="mt-3 text-[15px] leading-relaxed">
-            Most elbow straightening was <b className="tabular">{fmt(maxExt, 1, "°")}</b> against
-            the {limit.toFixed(0)}° limit
+          <p className="mt-5 max-w-xl font-display text-xl leading-snug">
+            The elbow straightened at most{" "}
+            <span className="tabular text-accent">{fmt(maxExt, 1, "°")}</span> between
+            arm-horizontal and release, against a {limit.toFixed(0)}° limit
             {ds.length > 1 && ` (${ds.length - flagged} legal, ${flagged} not legal)`}.
           </p>
           {!allVerified && reason && (
-            <p className="mt-2 border-l-2 border-warn/60 pl-3 text-sm text-muted">
-              <span className="text-warn">Why it&apos;s not certain: </span>
+            <p className="mt-4 max-w-xl border-l-2 border-warn pl-4 text-sm leading-relaxed text-muted">
+              <span className="font-medium text-warn">Why it isn&apos;t certain. </span>
               {reason.replace(/^Unverified:\s*/, "")} The verdict is read straight from the angle,
               so treat it as a guide and re-film side-on at 120+ fps to confirm.
             </p>
           )}
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-4 text-xs text-muted">
             2D video screening, not the official ICC test (which uses 3D motion capture).
           </p>
         </div>
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-6 self-start">
+        <dl className="grid grid-cols-2 self-start border-l border-border">
           <Stat
             label="Technique"
             value={technique.toFixed(0)}
@@ -227,25 +229,25 @@ function Results({
             label="Fatigue"
             value={result.fatigue.fatigue_index.toFixed(0)}
             unit="/100"
-            note={result.fatigue.alert ? "drift alert" : undefined}
-            noteCls="text-warn"
+            note={result.fatigue.alert ? "drift alert" : "no drift"}
+            noteCls={result.fatigue.alert ? "text-warn" : undefined}
           />
         </dl>
       </section>
 
       {/* deliveries */}
       <section>
-        <SectionHead title="Deliveries" hint="Open one to step through it frame by frame" />
-        <ul className="divide-y divide-border border-y border-border">
+        <SectionHead n="01" title="Deliveries" hint="Open one to step through it frame by frame" />
+        <ul className="divide-y divide-border border-b border-border">
           {ds.map((d, i) => {
             const b = bandStyle[bandOf(d.injury.overall)];
             const href = out.delivery_ids[i] ? `/deliveries/${out.delivery_ids[i]}` : null;
             return (
               <li
                 key={d.delivery_idx}
-                className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4 py-3.5 sm:grid-cols-[2.5rem_9rem_7rem_minmax(0,1fr)_auto]"
+                className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4 py-4 sm:grid-cols-[2.5rem_9rem_7rem_minmax(0,1fr)_auto]"
               >
-                <span className="font-display text-lg text-muted">{d.delivery_idx + 1}</span>
+                <span className="font-display text-3xl leading-none">{d.delivery_idx + 1}</span>
                 <span>
                   <VerdictWord
                     verdict={d.legality.verdict}
@@ -267,7 +269,7 @@ function Results({
                 {href && (
                   <Link
                     href={href}
-                    className="justify-self-end text-sm text-accent hover:underline"
+                    className="justify-self-end border border-foreground px-3 py-1 text-sm hover:bg-foreground hover:text-background"
                   >
                     Details
                   </Link>
@@ -282,6 +284,7 @@ function Results({
       <section className="grid gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div>
           <SectionHead
+            n="02"
             title="Coach report"
             hint={
               result.coach_source === "ollama"
@@ -290,7 +293,7 @@ function Results({
             }
           />
           <div
-            className="whitespace-pre-wrap text-[15px] leading-7 text-foreground/90"
+            className="max-w-[68ch] whitespace-pre-wrap font-display text-[17px] leading-8"
             data-testid="coach-report"
           >
             {result.coach_report.replace(/\*\*/g, "")}
@@ -306,6 +309,7 @@ function Results({
       <section className="grid gap-10 lg:grid-cols-2">
         <div>
           <SectionHead
+            n="03"
             title="Fatigue drift"
             hint={
               result.workload.acwr !== null
@@ -350,6 +354,7 @@ function Results({
       {result.similar_pros.length > 0 && (
         <section>
           <SectionHead
+            n="04"
             title="Closest reference actions"
             aside={
               <Link href="/compare" className="text-sm text-accent hover:underline">
@@ -364,8 +369,11 @@ function Results({
                   <span>{name}</span>
                   <span className="tabular text-muted">{sim.toFixed(0)}%</span>
                 </div>
-                <div className="mt-1.5 h-1 rounded-full bg-surface-2">
-                  <div className="h-full rounded-full bg-accent" style={{ width: `${sim}%` }} />
+                <div className="mt-2 h-px bg-border">
+                  <div
+                    className="h-0.5 -translate-y-px bg-foreground"
+                    style={{ width: `${sim}%` }}
+                  />
                 </div>
               </li>
             ))}
@@ -402,15 +410,15 @@ function Stat({
   testId?: string;
 }) {
   return (
-    <div>
-      <dt className="text-sm text-muted">{label}</dt>
-      <dd className="mt-1 flex items-baseline gap-1">
-        <span className="tabular text-4xl font-semibold" data-testid={testId}>
+    <div className="border-b border-border px-6 py-5 [&:nth-last-child(-n+2)]:border-b-0">
+      <dt className="kicker">{label}</dt>
+      <dd className="mt-2 flex items-baseline gap-1">
+        <span className="font-display text-6xl leading-none" data-testid={testId}>
           {value}
         </span>
         <span className="text-sm text-muted">{unit}</span>
-        {note && <span className={cn("ml-2 text-sm", noteCls ?? "text-muted")}>{note}</span>}
       </dd>
+      {note && <p className={cn("mt-2 text-sm", noteCls ?? "text-muted")}>{note}</p>}
     </div>
   );
 }

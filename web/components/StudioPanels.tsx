@@ -99,9 +99,9 @@ export function FrameStill({
       if (!p || !q) continue;
       ctx.strokeStyle =
         a.startsWith(bowl) && b.startsWith(bowl) && /shoulder|elbow|wrist/.test(a + b)
-          ? "#c6f432"
+          ? "#b3261e"
           : a.startsWith(front) && b.startsWith(front) && /hip|knee|ankle/.test(a + b)
-            ? "#ff7a2f"
+            ? "#d4560f"
             : "rgba(255,255,255,0.8)";
       ctx.lineWidth = 3 * s;
       ctx.lineCap = "round";
@@ -112,7 +112,7 @@ export function FrameStill({
     }
   }
   return (
-    <div className={cn("relative overflow-hidden rounded-sm bg-black", className)}>
+    <div className={cn("relative overflow-hidden bg-black", className)}>
       <video
         ref={video}
         src={src}
@@ -176,16 +176,16 @@ export function ReleaseSpotlight({
           edges={edges}
           className="border border-release"
         />
-        <span className="absolute left-2 top-2 rounded-sm bg-release px-2 py-0.5 font-display text-xs font-bold uppercase tracking-widest text-black">
+        <span className="absolute left-2 top-2 bg-release px-2 py-0.5 font-display text-xs font-bold uppercase tracking-widest text-white">
           Release · frame {d.phases.release}
         </span>
-        <span className="absolute bottom-2 right-2 rounded-sm bg-black/70 px-2 py-0.5 text-xs opacity-0 transition group-hover:opacity-100">
+        <span className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 text-xs text-[#f2eee5] opacity-0 transition group-hover:opacity-100">
           Open in player
         </span>
       </button>
       <div className="grid grid-cols-2 gap-2 content-start">
         {tiles.map(([label, value, hint]) => (
-          <div key={label} className="rounded-sm border border-border bg-surface-2 p-3">
+          <div key={label} className="border border-border bg-surface-2 p-3">
             <p className="font-display text-[11px] uppercase tracking-widest text-muted">{label}</p>
             <p className="tabular mt-1 text-2xl font-semibold">{value}</p>
             {hint && <p className="text-[11px] text-muted">{hint}</p>}
@@ -251,7 +251,7 @@ export function PhaseFilmstrip({
             type="button"
             onClick={() => onSeek(d.phases[key])}
             className={cn(
-              "rounded-sm border bg-surface-2 p-2 text-left hover:border-accent",
+              "border bg-surface-2 p-2 text-left hover:border-accent",
               isRel ? "border-release" : "border-border",
             )}
           >
@@ -271,7 +271,7 @@ export function PhaseFilmstrip({
                     y1={q1.y}
                     x2={q2.x}
                     y2={q2.y}
-                    stroke={bowl ? "#c6f432" : isRel ? "#ff7a2f" : "#e9efe7"}
+                    stroke={bowl ? "#b3261e" : isRel ? "#d4560f" : "#16140f"}
                     strokeWidth={span / 70}
                     strokeLinecap="round"
                   />
@@ -308,7 +308,7 @@ export function MechanicsPanel({
   return (
     <div className={cn("grid gap-3", compact ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-3")}>
       {groups.map((g) => (
-        <div key={g} className="rounded-sm border border-border bg-surface-2 p-3">
+        <div key={g} className="border border-border bg-surface-2 p-3">
           <p className="mb-2 font-display text-xs uppercase tracking-widest text-accent">{g}</p>
           <table className="w-full text-sm">
             <tbody>
@@ -364,9 +364,9 @@ export function KineticChain({ metrics }: { metrics: BiomechMetric[] }) {
           <span className="font-display uppercase tracking-wider text-muted">
             {["Pelvis", "Trunk", "Arm"][i]}
           </span>
-          <div className="relative h-3 rounded-sm bg-surface-2">
+          <div className="relative h-3 bg-surface-2">
             <div
-              className="absolute right-0 h-3 rounded-sm bg-accent"
+              className="absolute right-0 h-3 bg-accent"
               style={{ width: `${(p!.value! / max) * 100}%` }}
             />
           </div>

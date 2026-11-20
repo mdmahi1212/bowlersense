@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { PageHead } from "@/components/ui/PageHead";
 import { Empty, ErrorBox, Loading } from "@/components/ui/States";
 import { api, errorText } from "@/lib/api";
 import { useAsync } from "@/lib/useAsync";
-import { fmtDate } from "@/lib/utils";
+import { cleanName, fmtDate } from "@/lib/utils";
 
 export default function SessionsPage() {
   const [bowlerId, setBowlerId] = useState("");
@@ -28,25 +28,29 @@ export default function SessionsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Sessions</h1>
-        <label className="flex items-center gap-2 text-sm">
-          Bowler
-          <select
-            value={bowlerId}
-            onChange={(e) => setBowlerId(e.target.value)}
-            className="rounded-md border border-border bg-surface-2 px-3 py-2"
-          >
-            <option value="">All</option>
-            {(bowlers.data ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <div>
+      <PageHead
+        kicker="Archive"
+        title="Sessions"
+        deck="Every clip you have analysed on this computer, newest first."
+        aside={
+          <label className="flex items-center gap-3 text-sm">
+            <span className="kicker">Bowler</span>
+            <select
+              value={bowlerId}
+              onChange={(e) => setBowlerId(e.target.value)}
+              className="border-b border-foreground/60 bg-transparent py-1.5 outline-none"
+            >
+              <option value="">All bowlers</option>
+              {(bowlers.data ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        }
+      />
       {error && <ErrorBox error={error} />}
       {sessions.loading && !sessions.data && <Loading />}
       {sessions.error && (
@@ -64,47 +68,41 @@ export default function SessionsPage() {
         </Empty>
       )}
       {sessions.data && sessions.data.length > 0 && (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-muted">
-              <tr>
-                <th className="p-3 font-medium">Video</th>
-                <th className="p-3 font-medium">Bowler</th>
-                <th className="p-3 font-medium">Uploaded</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.data.map((s) => (
-                <tr key={s.id} className="border-b border-border last:border-0">
-                  <td className="p-3">
-                    <Link
-                      href={`/sessions/${s.id}`}
-                      className="font-medium text-accent hover:underline"
-                    >
-                      {s.original_name ?? s.id.slice(0, 8)}
-                    </Link>
-                  </td>
-                  <td className="p-3">{s.bowler_id ? (names.get(s.bowler_id) ?? "—") : "—"}</td>
-                  <td className="p-3 text-muted">{fmtDate(s.created_at)}</td>
-                  <td className="p-3">
-                    <StatusBadge status={s.status} />
-                  </td>
-                  <td className="p-3 text-right">
-                    <Button
-                      variant="ghost"
-                      onClick={() => remove(s.id)}
-                      aria-label="Delete session"
-                    >
-                      Delete
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <ol className="border-t border-foreground">
+          {sessions.data.map((s, i) => (
+            <li
+              key={s.id}
+              className="group grid grid-cols-[3rem_minmax(0,1fr)_auto] items-baseline gap-x-6 gap-y-1 border-b border-border py-5 md:grid-cols-[3rem_minmax(0,1fr)_12rem_9rem_5rem]"
+            >
+              <span className="tabular text-xs text-muted">
+                {String(sessions.data!.length - i).padStart(3, "0")}
+              </span>
+              <Link
+                href={`/sessions/${s.id}`}
+                className="truncate font-display text-2xl leading-snug group-hover:text-accent"
+                title={s.original_name ?? undefined}
+              >
+                {cleanName(s.original_name)}
+              </Link>
+              <span className="hidden text-sm text-muted md:block">
+                {s.bowler_id ? (names.get(s.bowler_id) ?? "Unknown bowler") : "No bowler set"}
+                <br />
+                {fmtDate(s.created_at)}
+              </span>
+              <span className="hidden md:block">
+                <StatusBadge status={s.status} />
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(s.id)}
+                aria-label="Delete session"
+                className="justify-self-end text-sm text-muted opacity-0 transition-opacity hover:text-bad focus:opacity-100 group-hover:opacity-100"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );

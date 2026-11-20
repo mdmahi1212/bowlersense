@@ -31,7 +31,7 @@ test("upload a synthetic delivery and see the results", async ({ page }) => {
   await page.screenshot({ path: "test-results/screens/delivery.png", fullPage: true });
 
   await page.getByRole("link", { name: "Sessions", exact: true }).first().click();
-  await expect(page.getByRole("link", { name: "delivery.mp4" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "delivery", exact: true })).toBeVisible();
   for (const name of ["Bowlers", "Compare actions", "Model evaluation", "Settings"]) {
     await page.getByRole("link", { name, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

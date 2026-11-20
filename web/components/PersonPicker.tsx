@@ -83,7 +83,7 @@ function Picker({
         Move the slider to a frame where the bowler is clearly visible, click their box, then
         re-run. The analysis then follows that person.
       </p>
-      <div className="relative overflow-hidden rounded-md border border-border bg-black">
+      <div className="relative overflow-hidden border border-border bg-black">
         <video
           ref={video}
           src={api.videoUrl(sessionId)}
@@ -113,7 +113,7 @@ function Picker({
                 className="cursor-pointer"
                 onClick={() => setSelected(id)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setSelected(id);
+                  if (e.key === "Enter" || e.key === "") setSelected(id);
                 }}
               >
                 <rect

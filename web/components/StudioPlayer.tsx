@@ -11,8 +11,8 @@ export interface SeekRequest {
 }
 
 const SPEEDS = [0.1, 0.25, 0.5, 1] as const;
-const LIME = "#c6f432";
-const ORANGE = "#ff7a2f";
+const LIME = "#ff5b3a";
+const ORANGE = "#ffc94a";
 
 /** Frame-accurate review player: live skeleton, frame stepping, slow motion, phase timeline. */
 export function StudioPlayer({
@@ -92,7 +92,7 @@ export function StudioPlayer({
         for (let i = Math.max(0, clipFrame - span); i <= clipFrame; i++) {
           const wp = frames.get(clipStart + i)?.keypoints[chain[2]];
           if (wp && prev) {
-            ctx.strokeStyle = `rgba(198,244,50,${(0.1 + 0.8 * (1 - (clipFrame - i) / span)).toFixed(2)})`;
+            ctx.strokeStyle = `rgba(255,91,58,${(0.1 + 0.8 * (1 - (clipFrame - i) / span)).toFixed(2)})`;
             ctx.lineWidth = 2.2 * sc;
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
@@ -107,7 +107,7 @@ export function StudioPlayer({
         for (let g = 6; g >= 1; g--) {
           const kk = frames.get(clipStart + clipFrame - g * step)?.keypoints;
           if (!kk) continue;
-          ctx.strokeStyle = `rgba(233,239,231,${(0.08 + 0.06 * (6 - g)).toFixed(2)})`;
+          ctx.strokeStyle = `rgba(242,238,229,${(0.08 + 0.06 * (6 - g)).toFixed(2)})`;
           ctx.lineWidth = 2 * sc;
           for (const [a, b] of edges) {
             const p = kk[a];
@@ -136,7 +136,7 @@ export function StudioPlayer({
             ? LIME
             : front.has(a) && front.has(b)
               ? ORANGE
-              : "rgba(233,239,231,0.85)";
+              : "rgba(242,238,229,0.85)";
         ctx.lineWidth =
           (bowl.has(a) && bowl.has(b)) || (front.has(a) && front.has(b)) ? 3.2 * s : 2 * s;
         ctx.beginPath();
@@ -289,7 +289,7 @@ export function StudioPlayer({
     >
       <div
         className={cn(
-          "relative overflow-hidden rounded-md border bg-black",
+          "relative overflow-hidden border bg-black",
           atRelease ? "border-release" : "border-border",
         )}
       >
@@ -312,16 +312,16 @@ export function StudioPlayer({
           style={{ objectFit: "contain" }}
         />
         <div className="pointer-events-none absolute left-3 top-3 flex gap-2">
-          <span className="rounded-sm bg-black/70 px-2 py-1 font-display text-xs uppercase tracking-widest text-accent">
+          <span className="bg-black/70 px-2 py-1 font-display text-xs uppercase tracking-widest text-[#ff5b3a]">
             {phaseAt(frame, phases)}
           </span>
           {atRelease && (
-            <span className="rounded-sm bg-release px-2 py-1 font-display text-xs font-bold uppercase tracking-widest text-black">
+            <span className="bg-release px-2 py-1 font-display text-xs font-bold uppercase tracking-widest text-white">
               Release frame
             </span>
           )}
         </div>
-        <div className="tabular pointer-events-none absolute bottom-3 right-3 rounded-sm bg-black/70 px-2 py-1 text-xs text-foreground">
+        <div className="tabular pointer-events-none absolute bottom-3 right-3 bg-black/70 px-2 py-1 text-xs text-[#f2eee5]">
           F {String(frame).padStart(4, "0")} / {last} · {t >= 0 ? "+" : ""}
           {(t * 1000).toFixed(0)} ms
         </div>
@@ -353,7 +353,7 @@ export function StudioPlayer({
             value={speed}
             onChange={(e) => setSpeed(Number(e.target.value))}
             aria-label="Playback speed"
-            className="rounded-md border border-border bg-surface px-1.5 py-1 text-foreground"
+            className="border border-border bg-surface px-1.5 py-1 text-foreground"
           >
             {SPEEDS.map((sp) => (
               <option key={sp} value={sp}>
@@ -369,15 +369,15 @@ export function StudioPlayer({
           type="button"
           disabled={busy || atRelease}
           onClick={() => onSetRelease(frame)}
-          className="rounded-md border border-release/60 px-2.5 py-1 text-xs text-release hover:bg-release hover:text-black disabled:opacity-40"
+          className="border border-release/60 px-2.5 py-1 text-xs text-release hover:bg-release hover:text-white disabled:opacity-40"
         >
           {busy ? "Re-analysing…" : "Set release here"}
         </button>
         <details className="relative ml-auto text-xs">
-          <summary className="cursor-pointer list-none rounded-md border border-border px-2.5 py-1 text-muted hover:text-foreground">
+          <summary className="cursor-pointer list-none border border-border px-2.5 py-1 text-muted hover:text-foreground">
             Layers ▾
           </summary>
-          <div className="absolute right-0 z-20 mt-1 grid w-44 gap-2 rounded-md border border-border bg-surface p-3 text-muted shadow-xl">
+          <div className="absolute right-0 z-20 mt-1 grid w-44 gap-2 border border-border bg-surface p-3 text-muted ">
             <Toggle on={skeleton && !burned} set={setSkeleton} disabled={burned}>
               Skeleton
             </Toggle>
@@ -436,7 +436,7 @@ function Timeline({
     <div className="select-none">
       <div
         ref={bar}
-        className="relative h-10 cursor-pointer rounded-sm border border-border bg-surface-2"
+        className="relative h-10 cursor-pointer border border-border bg-surface-2"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           seekAt(e.clientX);
@@ -500,9 +500,9 @@ function Ctl({
       aria-label={label}
       title={label}
       className={cn(
-        "tabular rounded-md px-2.5 py-1 text-xs transition-colors",
+        "tabular px-2.5 py-1 text-xs transition-colors",
         strong
-          ? "bg-accent font-semibold text-black hover:bg-accent-strong"
+          ? "bg-accent font-semibold text-white hover:bg-accent-strong"
           : active
             ? "text-accent"
             : "text-muted hover:bg-surface-2 hover:text-foreground",

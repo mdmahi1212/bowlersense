@@ -47,7 +47,7 @@ export function SkeletonView({
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
-      className="h-72 w-full rounded-md bg-surface-2"
+      className="h-72 w-full bg-surface-2"
       role="img"
       aria-label={label}
     >

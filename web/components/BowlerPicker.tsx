@@ -48,7 +48,7 @@ export function BowlerPicker({
           id="bowler"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="min-w-52 rounded-md border border-border bg-surface-2 px-3 py-2"
+          className="min-w-52 border border-border bg-surface-2 px-3 py-2"
         >
           <option value="">No profile (one-off analysis)</option>
           {(bowlers.data ?? []).map((b) => (
@@ -64,13 +64,13 @@ export function BowlerPicker({
       </div>
       {bowlers.error && <p className="text-bad">Couldn&apos;t load bowlers: {bowlers.error}</p>}
       {creating && (
-        <div className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3">
+        <div className="flex flex-wrap items-end gap-2 border border-border p-3">
           <label className="flex flex-col gap-1">
             Name
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-md border border-border bg-surface-2 px-2 py-1.5"
+              className="border border-border bg-surface-2 px-2 py-1.5"
             />
           </label>
           <label className="flex flex-col gap-1">
@@ -78,7 +78,7 @@ export function BowlerPicker({
             <select
               value={arm}
               onChange={(e) => setArm(e.target.value as "right" | "left")}
-              className="rounded-md border border-border bg-surface-2 px-2 py-1.5"
+              className="border border-border bg-surface-2 px-2 py-1.5"
             >
               <option value="right">Right</option>
               <option value="left">Left</option>

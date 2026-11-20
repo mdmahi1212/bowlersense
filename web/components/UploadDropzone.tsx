@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
+import { BowlerAtRelease } from "@/components/art/Figures";
 import { cn } from "@/lib/utils";
 
 const ACCEPT =
@@ -58,8 +59,10 @@ export function UploadDropzone({
       onDragLeave={() => setOver(false)}
       onDrop={drop}
       className={cn(
-        "flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors",
-        over ? "border-accent bg-accent/10" : "border-border bg-surface hover:border-accent",
+        "group relative grid cursor-pointer items-center gap-8 overflow-hidden bg-plate p-8 text-[#f2eee5] transition-[outline] sm:grid-cols-[180px_minmax(0,1fr)]",
+        over
+          ? "outline outline-2 outline-offset-4 outline-accent"
+          : "hover:outline hover:outline-1 hover:outline-offset-4 hover:outline-foreground/40",
         disabled && "cursor-not-allowed opacity-60",
       )}
     >
@@ -71,21 +74,28 @@ export function UploadDropzone({
         data-testid="video-input"
         onChange={(e) => pick(e.target.files?.[0])}
       />
-      {file ? (
-        <>
-          <p className="font-semibold">{file.name}</p>
-          <p className="text-sm text-muted">
-            {(file.size / 1024 / 1024).toFixed(1)} MB · click to change
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="font-semibold">Drop a bowling video (or a photo) here</p>
-          <p className="text-sm text-muted">
-            or click to choose · MP4, MOV or AVI up to 500 MB · JPG or PNG for a posture check
-          </p>
-        </>
-      )}
+      <BowlerAtRelease className="mx-auto h-44 w-auto text-[#f2eee5] sm:h-48" />
+      <div>
+        {file ? (
+          <>
+            <p className="kicker !text-[#f2eee5]/60">Ready</p>
+            <p className="mt-2 break-all font-display text-2xl">{file.name}</p>
+            <p className="mt-2 text-sm text-[#f2eee5]/60">
+              {(file.size / 1024 / 1024).toFixed(1)} MB · click to choose another
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="kicker !text-[#f2eee5]/60">Step one</p>
+            <p className="mt-2 font-display text-3xl leading-tight">
+              Drop a bowling video here, or click to choose one.
+            </p>
+            <p className="mt-3 text-sm text-[#f2eee5]/60">
+              MP4, MOV or AVI up to 500 MB. A JPG or PNG gives a single-frame posture check.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

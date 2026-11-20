@@ -29,12 +29,14 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           Skip to content
         </a>
         <AppShell>
-          <main id="main" className="w-full flex-1 px-6 py-5">
+          <main id="main" className="mx-auto w-full max-w-[1400px] flex-1 px-8 pb-16 pt-6">
             {children}
           </main>
-          <footer className="border-t border-border px-6 py-2 text-[11px] text-muted">
-            Legality is 2D video screening, not the ICC 3D test. Injury risk is a rule-based
-            estimate, not medical advice.
+          <footer className="border-t border-border">
+            <p className="mx-auto max-w-[1400px] px-8 py-4 text-xs text-muted">
+              Everything runs on this computer. Legality is 2D video screening, not the ICC 3D test.
+              Injury risk is a rule-based estimate, not medical advice.
+            </p>
           </footer>
         </AppShell>
       </body>

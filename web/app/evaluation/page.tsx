@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHead } from "@/components/ui/PageHead";
 import { useState } from "react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { ErrorBox, Loading } from "@/components/ui/States";
@@ -19,9 +20,7 @@ export default function EvaluationPage() {
   if (report.error)
     return (
       <div className="space-y-4">
-        <h1 className="font-display text-4xl font-bold uppercase tracking-wide">
-          Model <span className="text-accent">evaluation</span>
-        </h1>
+        <PageHead kicker="Insight" title="Model evaluation" />
         <ErrorBox
           error={report.error}
           action={<code className="text-xs">python scripts/evaluate.py</code>}
@@ -35,34 +34,30 @@ export default function EvaluationPage() {
   const scores = r.scores.filter((c) => c.data === data);
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
-        <div>
-          <h1 className="font-display text-4xl font-bold uppercase tracking-wide">
-            Model <span className="text-accent">evaluation</span>
-          </h1>
-          <p className="text-sm text-muted">
-            Accuracy, precision, recall, F1 and confusion matrices per task. Generated{" "}
-            {new Date(r.generated).toLocaleString()}.
-          </p>
-        </div>
-        <div className="flex rounded-sm border border-border p-0.5" role="tablist">
-          {(["real", "synthetic"] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={data === k}
-              onClick={() => setData(k)}
-              className={cn(
-                "px-4 py-1.5 font-display text-sm uppercase tracking-wider",
-                data === k ? "bg-accent text-black" : "text-muted hover:text-foreground",
-              )}
-            >
-              {k === "real" ? "Real footage" : "Synthetic ground truth"}
-            </button>
-          ))}
-        </div>
-      </header>
+      <PageHead
+        kicker="Insight"
+        title="Model evaluation"
+        deck={`How accurate each model is: accuracy, precision, recall, F1 and confusion matrices per task. Generated ${new Date(r.generated).toLocaleString()}.`}
+        aside={
+          <div className="flex border border-foreground" role="tablist">
+            {(["real", "synthetic"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={data === k}
+                onClick={() => setData(k)}
+                className={cn(
+                  "px-4 py-1.5 text-sm capitalize",
+                  data === k ? "bg-foreground text-background" : "text-muted hover:text-foreground",
+                )}
+              >
+                {k === "real" ? "Real footage" : "Synthetic ground truth"}
+              </button>
+            ))}
+          </div>
+        }
+      />
       <p className="text-sm text-muted">
         {data === "real"
           ? "Measured on the labelled match-footage dataset's held-out test videos (never used for training)."
@@ -73,7 +68,7 @@ export default function EvaluationPage() {
         <Card className="overflow-x-auto">
           <CardTitle>Classification summary</CardTitle>
           <table className="w-full text-sm">
-            <thead className="text-left font-display text-[11px] uppercase tracking-wider text-muted">
+            <thead className="text-left kicker text-muted">
               <tr>
                 {[
                   "Task",
@@ -123,7 +118,7 @@ export default function EvaluationPage() {
         <Card className="overflow-x-auto">
           <CardTitle>Measurement accuracy (biomechanics)</CardTitle>
           <table className="w-full text-sm">
-            <thead className="text-left font-display text-[11px] uppercase tracking-wider text-muted">
+            <thead className="text-left kicker text-muted">
               <tr>
                 {[
                   "Measurement",
@@ -171,13 +166,8 @@ export default function EvaluationPage() {
           <CardTitle>Other scores</CardTitle>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {scores.map((sc) => (
-              <div
-                key={sc.task + sc.metric}
-                className="rounded-sm border border-border bg-surface-2 p-3"
-              >
-                <p className="font-display text-[11px] uppercase tracking-widest text-muted">
-                  {sc.task}
-                </p>
+              <div key={sc.task + sc.metric} className="border border-border bg-surface-2 p-3">
+                <p className="kicker text-muted">{sc.task}</p>
                 <p className="text-xs text-muted">{sc.metric}</p>
                 <p className="tabular mt-1 text-2xl font-semibold">
                   {sc.metric.startsWith("MAE") ? sc.value.toFixed(0) : pct(sc.value)}
@@ -217,10 +207,7 @@ function ConfusionCard({ c }: { c: ClassificationReport }) {
             <tr>
               <th className="p-1 text-[10px] font-normal text-muted">true ↓ / pred →</th>
               {c.labels.map((l) => (
-                <th
-                  key={l}
-                  className="p-1 font-display text-[11px] uppercase tracking-wider text-muted"
-                >
+                <th key={l} className="p-1 kicker text-muted">
                   {l}
                 </th>
               ))}
@@ -229,21 +216,19 @@ function ConfusionCard({ c }: { c: ClassificationReport }) {
           <tbody>
             {c.confusion.map((row, i) => (
               <tr key={c.labels[i]}>
-                <th className="p-1 text-right font-display text-[11px] uppercase tracking-wider text-muted">
-                  {c.labels[i]}
-                </th>
+                <th className="p-1 text-right kicker text-muted">{c.labels[i]}</th>
                 {row.map((v, j) => (
                   <td
                     key={j}
                     className={cn(
                       "h-12 w-16 border border-background text-center text-sm font-semibold",
-                      i === j ? "text-black" : "text-foreground",
+                      i === j ? "text-white" : "text-foreground",
                     )}
                     style={{
                       background:
                         i === j
-                          ? `rgba(198,244,50,${0.25 + 0.75 * (v / max)})`
-                          : `rgba(255,77,77,${v ? 0.15 + 0.6 * (v / max) : 0.04})`,
+                          ? `rgba(46,112,72,${0.25 + 0.75 * (v / max)})`
+                          : `rgba(179,38,30,${v ? 0.15 + 0.6 * (v / max) : 0.04})`,
                     }}
                   >
                     {v}

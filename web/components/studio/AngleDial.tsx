@@ -27,10 +27,7 @@ export function AngleDial({
   const [nx, ny] = pt(value ?? 0, 44);
   return (
     <figure
-      className={cn(
-        "rounded-sm border bg-surface-2 p-2",
-        highlight ? "border-release" : "border-border",
-      )}
+      className={cn("border bg-surface-2 p-2", highlight ? "border-release" : "border-border")}
     >
       <svg
         viewBox="0 0 120 68"
@@ -43,7 +40,7 @@ export function AngleDial({
           <path
             d={arc(band[0], band[1], 50)}
             fill="none"
-            stroke="rgba(61,220,132,0.45)"
+            stroke="rgba(46,112,72,0.4)"
             strokeWidth={6}
           />
         )}

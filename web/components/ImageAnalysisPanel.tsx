@@ -42,7 +42,7 @@ export function ImageAnalysisPanel({
     }
   }
 
-  const select = "rounded-md border border-border bg-surface-2 px-3 py-2";
+  const select = "border border-border bg-surface-2 px-3 py-2";
   return (
     <div className="space-y-4">
       <Card>
@@ -104,12 +104,12 @@ export function ImageAnalysisPanel({
               <img
                 src={fileUrl(result.annotated)}
                 alt="Photo with the detected skeleton"
-                className="w-full rounded-md"
+                className="w-full "
               />
             )}
             <ul className="space-y-3 text-sm">
               {result.checks.map((c) => (
-                <li key={c.code} className="rounded-md border border-border p-3">
+                <li key={c.code} className="border border-border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold">{c.name}</span>
                     {c.flagged === true && (
